@@ -1,6 +1,7 @@
 /* Herramientas M&E · Novedades de la portada y arranque de la aplicación.
    Agrega cada mejora nueva al inicio de NOVEDADES (la más reciente primero). */
 const NOVEDADES=[
+  ['Noviembre 2026','Depurador IMS: rediseño de la página de inicio al estilo del resto de la plataforma, con acceso directo al IMS (ims.iom.int) junto al botón «Guía de uso», tarjetas de modo a ancho completo y listado de formularios configurados.'],
   ['Noviembre 2026','Repositorio de tableros: incorporación de los tableros generales de Seguimiento de la emergencia (DHR), Gran Misión Vuelta a la Patria, Retorno Voluntario Asistido y Reintegración (AVR), Encuesta de satisfacción a beneficiarios y JAPÓN - General.'],
   ['Noviembre 2026','Repositorio de tableros: eliminación de la columna de descripción en la tabla y de los botones de vista previa.'],
   ['Noviembre 2026','Proyectos y Repositorio de tableros: filtros ubicados en el panel lateral derecho en versión web (al estilo de Novedades), panel deslizable oculto por defecto bajo el botón «Filtros» en pantallas pequeñas y teléfonos, y menú lateral izquierdo oculto por defecto en teléfonos en orientación horizontal.'],

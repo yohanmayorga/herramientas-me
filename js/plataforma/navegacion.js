@@ -74,7 +74,14 @@ function navApply(){
     if(NAV.gruposCerrados.has(g)) NAV.gruposCerrados.delete(g); else NAV.gruposCerrados.add(g);
     navApply();
   });
-  side.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>navDrawer(false)));
+  side.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{
+    navDrawer(false);
+    if(a.getAttribute('href')==='#/depurador-ims'&&NAV.ruta==='depurador-ims'){
+      S.guide=false; S.dash=false;
+      if(S.step===1){ S.loadMode=null; S.pending=null; }
+      render();
+    }
+  }));
   if(sideNews){
     sideNews.hidden=!enInicio;
     if(enInicio) sideNews.innerHTML=viewSideNews();
@@ -84,7 +91,6 @@ function navApply(){
     if(!enFiltros) sideFilters.innerHTML='';
   }
   const enDep=NAV.ruta==='depurador-ims';
-  $('#btnGuide').hidden=!enDep;
   wrap.hidden=!enDep; home.hidden=enDep;
   document.title=h?`${h.nombre} · Herramientas M&E`:'Herramientas M&E';
   if(enDep){ render(); return; }

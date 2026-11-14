@@ -12,11 +12,61 @@ function withCtx(it,fn){
   if(r&&typeof r.then==='function') return r.finally(done); done(); return r;
 }
 function viewModeChoice(){
-  return `<h1>Carga los archivos del IMS</h1>
-  <p class="lead">Elige cómo vas a trabajar. Los datos se procesan en tu navegador y no salen de tu equipo.</p>
-  <div class="modes">
-    <button class="modecard" type="button" data-mode="single"><b>Depurador de archivo único</b><span>Procesa un formulario a la vez: limpieza de datos, tabla para Power BI e informe PDF de ese formulario.</span></button>
-    <button class="modecard" type="button" data-mode="multi"><b>Depurador múltiple</b><span>Carga el Registro de Familias y varios formularios a la vez para obtener una tabla para Power BI y un informe PDF globales. La limpieza de datos se descarga por archivo.</span></button>
+  const forms=[
+    ['Registro de Familias','Base de familias e integrantes'],
+    ['Atenciones en salud','Consultas y diagnósticos'],
+    ['Atenciones en salud mental','Atención psicosocial y sesiones'],
+    ['Atenciones en protección','Asistencias, acciones y kits de dignidad'],
+    ['Atención psicosocial','Sesiones, ingreso y acompañamiento'],
+    ['Actividades comunitarias','Protección, salud/SMAPS y WASH'],
+    ['Entrega de kits NFI','Clasificación NFI, WASH u otro'],
+    ['Kits y servicios WASH','Kits y servicios de agua y saneamiento']
+  ];
+  const extSvg='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>';
+  return `<div class="ims-home">
+    <section class="p-hero pj-hero">
+      <div>
+        <h1>Depurador IMS</h1>
+        <p>Valida y limpia las descargas de Excel del IMS, y genera reportes de errores, tablas para Power BI, informes en PDF, tablero interactivo y SITREP.</p>
+      </div>
+      <div class="pj-hero-side">
+        <div class="pj-today">${icono('candado',15)} Procesamiento local en tu navegador</div>
+        <a class="btn ims-gbtn" href="https://ims.iom.int/" target="_blank" rel="noopener noreferrer">${extSvg}<span>Enlace al IMS</span></a>
+        ${guideBtnHtml()}
+      </div>
+    </section>
+
+    <h2 class="p-title">Elige el modo de trabajo</h2>
+    <div class="p-grid ims-modes">
+      <article class="p-card ims-mcard" data-mode="single" tabindex="0" role="button" aria-label="Abrir Depurador de archivo único">
+        <div class="p-ch"><span class="p-ic">${icono('archivo',24)}</span><span class="chip-st ok">Un formulario a la vez</span></div>
+        <h3>Depurador de archivo único</h3>
+        <p class="muted">Procesa un formulario individual del IMS (o vincúlalo con el Registro de Familias) para auditar su calidad y exportar sus resultados.</p>
+        <ul>
+          <li>Limpieza avanzada del Registro de Familias con nivel de severidad</li>
+          <li>Reporte detallado de errores en Excel para corregir en el IMS</li>
+          <li>Tabla estructurada para Power BI, informe PDF y tablero interactivo</li>
+        </ul>
+        <div class="p-cf"><span class="btn primary">Abrir archivo único ${icono('flecha',16)}</span></div>
+      </article>
+
+      <article class="p-card ims-mcard" data-mode="multi" tabindex="0" role="button" aria-label="Abrir Depurador múltiple">
+        <div class="p-ch"><span class="p-ic">${icono('depurador',24)}</span><span class="chip-st ok">Consolidado + SITREP</span></div>
+        <h3>Depurador múltiple</h3>
+        <p class="muted">Carga el Registro de Familias junto con varios formularios para cruzarlos en un solo proceso y obtener salidas consolidadas.</p>
+        <ul>
+          <li>Verificación guiada paso a paso por formulario en acordeón</li>
+          <li>Excel global para Power BI e informe PDF consolidado con mapa</li>
+          <li>Exportación del SITREP por sector y estado + tablero global</li>
+        </ul>
+        <div class="p-cf"><span class="btn primary">Abrir depurador múltiple ${icono('flecha',16)}</span></div>
+      </article>
+    </div>
+
+    <h2 class="p-title" style="margin-top:28px">Formularios configurados</h2>
+    <div class="ims-forms">
+      ${forms.map(([n,d])=>`<div class="ims-fitem"><b>${esc(n)}</b><span>${esc(d)}</span></div>`).join('')}
+    </div>
   </div>`;
 }
 function viewMultiLoad(){
@@ -28,13 +78,21 @@ function viewMultiLoad(){
       <span class="${r.f?'':'muted'}">${r.f?esc(r.f.name):'Ningún archivo seleccionado'}</span>
       ${r.f&&r.det&&r.det!==r.type?`<span class="status warn">El archivo parece ser: ${esc(mmLabel(r.det))}</span>`:''}</div>
     ${r.fixed?'<span></span>':`<button class="btn sm" type="button" data-mmdel="${i}" aria-label="Quitar fila">Quitar</button>`}</div>`;
-  return `<h1>Depurador múltiple</h1>
-  <p class="lead">Arrastra todos los Excel a la vez: cada archivo se identifica automáticamente y aparece en la lista con su tipo, que puedes corregir en el desplegable. El Registro de Familias es obligatorio porque vincula a las familias y personas de todos los formularios. Usa un archivo por tipo de formulario.</p>
+  return `<section class="p-hero pj-hero ims-subhero">
+    <div>
+      <h1>Depurador múltiple</h1>
+      <p>Arrastra todos los Excel a la vez: cada archivo se identifica automáticamente y aparece en la lista con su tipo. El Registro de Familias es obligatorio porque vincula a las familias y personas de todos los formularios.</p>
+    </div>
+    <div class="pj-hero-side">
+      <button class="btn" type="button" id="mmMode">← Cambiar de modo</button>
+      ${guideBtnHtml('btn ims-gbtn')}
+    </div>
+  </section>
   <div class="drop" id="mmDrop" tabindex="0" role="button" aria-label="Seleccionar archivos" style="margin-bottom:16px"><strong>Arrastra aquí todos los Excel o haz clic para buscarlos</strong><span>Se identifican automáticamente</span></div><input type="file" id="mmMulti" accept=".xlsx,.xls,.xlsm" multiple hidden>
   <div class="panel">${L.map(row).join('')}
     <div class="row" style="margin-top:12px"><button class="btn" type="button" id="mmAdd">Agregar formulario</button></div></div>
   ${regMissing?'<div class="note bad" style="margin-top:14px">Falta el Registro de Familias: cárgalo para poder continuar.</div>':''}
-  <div class="actions"><button class="btn" type="button" id="mmMode">Cambiar de modo</button><button class="btn primary" type="button" id="mmGo" ${ok?'':'disabled'}>Verificar archivos</button></div>`;
+  <div class="actions"><span></span><button class="btn primary" type="button" id="mmGo" ${ok?'':'disabled'}>Verificar archivos</button></div>`;
 }
 async function mmProcess(){
   const L=S.mmLoad; busy(true); await nextFrame();

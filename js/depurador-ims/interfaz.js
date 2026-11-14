@@ -18,12 +18,20 @@ async function askRestart(){
   Object.assign(S,{famAtt:null,salComp:null,mode:null,step:1,pending:null,loadMode:null,fam:null,sal:null,nfi:null,com:null,mm:null,mmLoad:null,registro:null,salWb:null,nfiWb:null,result:null,dash:null,guide:false});
   render(); toast('Listo: puedes cargar nuevos archivos.');
 }
+const GUIDE_SVG='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/></svg>';
+function guideBtnHtml(cls='btn primary ims-gbtn'){
+  return `<button class="${cls}" type="button" data-guide-open>${GUIDE_SVG}<span>Guía de uso</span></button>`;
+}
 function render(){
-  const wrap=document.querySelector('.wrap'), gb=$('#btnGuide');
-  if(S.guide){ wrap.classList.add('guide'); gb.querySelector('.blabel').textContent='Volver a la herramienta'; gb.title='Volver a la herramienta'; gb.setAttribute('aria-label','Volver a la herramienta'); gb.setAttribute('aria-pressed','true'); $('#main').innerHTML=viewGuide(); document.querySelectorAll('[data-guide-back]').forEach(b=>b.onclick=()=>{ S.guide=false; render(); }); window.scrollTo(0,0); return; }
-  if(S.dash){ wrap.classList.add('guide'); gb.querySelector('.blabel').textContent='Guía de uso'; gb.title='Guía de uso'; gb.setAttribute('aria-label','Guía de uso'); gb.setAttribute('aria-pressed','false'); $('#main').innerHTML=viewDash(); bindDash(); window.scrollTo(0,0); return; }
-  wrap.classList.remove('guide'); gb.querySelector('.blabel').textContent='Guía de uso'; gb.title='Guía de uso'; gb.setAttribute('aria-label','Guía de uso'); gb.setAttribute('aria-pressed','false');
-  renderRail(); const m=$('#main'); m.innerHTML=(S.mode&&S.step>1?S.mode.views[S.step]:[null,viewLoad,viewValidate,viewReview,viewExport][S.step])(); if(S.mode&&S.step>1) S.mode.bind(); else bindStep(); m.scrollIntoView({block:'start'}); window.scrollTo(0,0);  document.querySelectorAll('[data-opendash]').forEach(b=>b.onclick=openDash); }
+  const wrap=document.querySelector('.wrap');
+  if(S.guide){ wrap.classList.add('guide'); $('#main').innerHTML=viewGuide(); document.querySelectorAll('[data-guide-back]').forEach(b=>b.onclick=()=>{ S.guide=false; render(); }); window.scrollTo(0,0); return; }
+  if(S.dash){ wrap.classList.add('guide'); $('#main').innerHTML=viewDash(); bindDash(); window.scrollTo(0,0); return; }
+  const enPortadaIms=S.step===1&&!S.loadMode;
+  wrap.classList.toggle('guide',enPortadaIms);
+  renderRail(); const m=$('#main'); m.innerHTML=(S.mode&&S.step>1?S.mode.views[S.step]:[null,viewLoad,viewValidate,viewReview,viewExport][S.step])(); if(S.mode&&S.step>1) S.mode.bind(); else bindStep(); m.scrollIntoView({block:'start'}); window.scrollTo(0,0);
+  document.querySelectorAll('[data-opendash]').forEach(b=>b.onclick=openDash);
+  document.querySelectorAll('[data-guide-open]').forEach(b=>b.onclick=()=>{ S.guide=true; render(); });
+}
 
 function pendingPanel(){
   const P=S.pending, main=P.find(x=>x.type!=='registro'), needReg=main&&NEEDS_REG.has(main.type)&&!P.some(x=>x.type==='registro')&&!S.registro;
@@ -43,10 +51,18 @@ function viewGuide(){
     ['Actividades comunitarias','No','Actividades grupales; se elige qué tipos revisar (protección, salud y SMAPS, WASH).'],
     ['Entrega de kits NFI','Sí','Se confirma la categoría de cada kit (NFI, WASH u Otro).'],
     ['Entrega de kits y servicios WASH','Sí','Kits y servicios (baños, duchas, lavandería, agua) por separado.']];
-  return `<div class="guide-doc">
-  <h1>Guía de uso</h1>
-  <p class="lead">El Depurador IMS revisa la calidad de los Excel que se descargan del IMS y genera tres salidas: un reporte de limpieza de datos, tablas ordenadas para Power BI y un informe en PDF. No modifica los archivos originales y todo el procesamiento ocurre en tu navegador: los datos no salen de tu equipo.</p>
-  <h2>Antes de empezar</h2>
+  return `<div class="ims-home">
+  <section class="p-hero pj-hero">
+    <div>
+      <h1>Guía de uso · Depurador IMS</h1>
+      <p>El Depurador IMS revisa la calidad de los Excel que se descargan del IMS y genera reportes de limpieza de datos, tablas ordenadas para Power BI, informes en PDF, tablero interactivo y SITREP. No modifica los archivos originales y todo el procesamiento ocurre en tu navegador.</p>
+    </div>
+    <div class="pj-hero-side">
+      <button class="btn primary" type="button" data-guide-back>← Volver al Depurador IMS</button>
+    </div>
+  </section>
+  <div class="guide-doc">
+  <h2 style="margin-top:0">Antes de empezar</h2>
   <div class="note">Descarga los Excel completos desde el IMS, sin modificarlos. Para las atenciones (salud, salud mental, protección) y las entregas de kits necesitas también el <b>Registro de Familias completo</b>, sin filtro de fechas: de ahí salen el sexo, la edad y los integrantes de cada familia.</div>
   <h2>Pasos</h2>
   <ol class="gsteps">
@@ -75,23 +91,30 @@ function viewGuide(){
     <li>En Power BI, para contar personas únicas usa un recuento distinto; las tablas de beneficiarios pueden repetir personas que recibieron más de una entrega.</li>
     <li>Para procesar otro archivo, usa «Procesar otro archivo» en el paso Exportar o «Cargar otro archivo» en Verificar.</li>
   </ul>
-  <div class="actions"><span></span><button class="btn primary" type="button" data-guide-back>Volver a la herramienta</button></div>
-  </div>`;
+  <div class="actions"><span></span><button class="btn primary" type="button" data-guide-back>← Volver al Depurador IMS</button></div>
+  </div></div>`;
 }
 function viewLoad(){
   if(!S.loadMode) return viewModeChoice();
   if(S.loadMode==='multi') return viewMultiLoad();
-  return `<h1>Depurador de archivo único</h1>
-  <p class="lead">Carga el Excel tal como se descarga del IMS. El sistema identifica el formulario por sus pestañas y columnas y te pide confirmarlo antes de procesar. Los datos se procesan en tu navegador y no salen de tu equipo.</p>
-  <p class="muted" style="margin:-10px 0 18px">Formularios configurados: Registro de Familias; Atenciones en salud, salud mental y protección (requieren también el Registro de Familias; puedes cargar ambos a la vez); Actividades comunitarias; y Entrega de kits NFI y Entrega de kits y servicios WASH (requieren el Registro de Familias). Los demás se procesan en modo genérico mientras se configuran.</p>
+  return `<section class="p-hero pj-hero ims-subhero">
+    <div>
+      <h1>Depurador de archivo único</h1>
+      <p>Carga el Excel tal como se descarga del IMS. El sistema identifica el formulario por sus pestañas y columnas y te pide confirmarlo antes de procesar.</p>
+    </div>
+    <div class="pj-hero-side">
+      <button class="btn" type="button" id="toMode">← Cambiar de modo</button>
+      ${guideBtnHtml('btn ims-gbtn')}
+    </div>
+  </section>
+  <p class="muted" style="margin:-6px 0 18px">Formularios configurados: Registro de Familias; Atenciones en salud, salud mental y protección (requieren también el Registro de Familias; puedes cargar ambos a la vez); Actividades comunitarias; y Entrega de kits NFI y Entrega de kits y servicios WASH (requieren el Registro de Familias). Los demás se procesan en modo genérico mientras se configuran.</p>
   <div class="drop" id="drop" tabindex="0" role="button" aria-label="Seleccionar archivos"><strong>Arrastra aquí los Excel o haz clic para buscarlos</strong><span>.xlsx, .xls o .csv</span></div>
   ${S.pending&&S.pending.length?pendingPanel():''}
-  <div class="row" style="margin-top:12px"><button class="btn sm" type="button" id="toMode">Cambiar de modo</button></div>
   <h2>Qué hace cada paso</h2>
   <div class="grid2">
     <div class="panel"><b>Validar</b><p class="muted" style="margin:4px 0 0">Identifica el formulario, empareja las columnas aunque el IMS las haya renombrado y avisa de columnas nuevas o faltantes.</p></div>
     <div class="panel"><b>Revisar y filtrar</b><p class="muted" style="margin:4px 0 0">Corrige fechas, números, espacios y variantes de escritura; marca duplicados y errores; filtra por fechas y criterios.</p></div>
-    <div class="panel"><b>Exportar</b><p class="muted" style="margin:4px 0 0">Base limpia, tabla detallada para Power BI o matriz agregada 345W.</p></div>
+    <div class="panel"><b>Exportar</b><p class="muted" style="margin:4px 0 0">Base limpia, tabla detallada para Power BI, informe PDF o tablero interactivo.</p></div>
   </div>`;
 }
 function viewValidate(){

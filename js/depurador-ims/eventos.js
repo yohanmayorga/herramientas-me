@@ -3,7 +3,10 @@
 function bindStep(){
   const on=(sel,ev,fn)=>{ const el=$(sel); if(el) el.addEventListener(ev,fn); };
   if(S.step===1){
-    document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{ S.loadMode=b.dataset.mode; render(); });
+    document.querySelectorAll('[data-mode]').forEach(b=>{
+      b.onclick=()=>{ S.loadMode=b.dataset.mode; render(); };
+      b.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); S.loadMode=b.dataset.mode; render(); } };
+    });
     if(!S.loadMode) return;
     if(S.loadMode==='multi'){ mmLoadBind(); return; }
     { const tm=$('#toMode'); if(tm) tm.onclick=()=>{ S.loadMode=null; S.pending=null; render(); }; }

@@ -11,10 +11,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<link rel="stylesheet" href="css/estilos.css">
-<link rel="stylesheet" href="css/plataforma.css">
-<link rel="stylesheet" href="css/proyectos.css">
-<link rel="stylesheet" href="css/tableros.css">
+<link rel="stylesheet" href="css/estilos.css?v=3">
+<link rel="stylesheet" href="css/plataforma.css?v=3">
+<link rel="stylesheet" href="css/proyectos.css?v=3">
+<link rel="stylesheet" href="css/tableros.css?v=3">
 </head>
 <body>
 <header class="top">
@@ -37,7 +37,7 @@
     <path class="m-steam m-s2" d="M35.4 35.2 c-1.2-1.6 1-2.6 0-4.6" fill="none" stroke-width="1" stroke-linecap="round"/>
   </svg><div class="brand">Herramientas M&amp;E<small>Monitoreo y Evaluación · OIM Venezuela</small></div></a>
   <div class="spacer"></div>
-  <button class="btn" id="btnGuide" type="button" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/></svg><span class="blabel">Guía de uso</span></button>
+  <span id="btnGuide" hidden aria-hidden="true"><span class="blabel"></span></span>
   <button class="btn" id="btnTheme" type="button" aria-pressed="false">☾ Modo oscuro</button>
 </header>
 
@@ -105,37 +105,37 @@
   </svg>
   <span>Procesando…</span></div></div>
 
-<script src="js/comun/utilidades.js"></script>
-<script src="js/depurador-ims/perfiles.js"></script>
-<script src="js/depurador-ims/estado.js"></script>
-<script src="js/depurador-ims/lectura.js"></script>
-<script src="js/depurador-ims/columnas.js"></script>
-<script src="js/depurador-ims/procesamiento.js"></script>
-<script src="js/depurador-ims/exportacion.js"></script>
-<script src="js/depurador-ims/interfaz.js"></script>
-<script src="js/depurador-ims/eventos.js"></script>
-<script src="js/depurador-ims/gestion-perfiles.js"></script>
-<script src="js/comun/selector-fechas.js"></script>
-<script src="js/depurador-ims/formularios/registro-familias.js"></script>
-<script src="js/depurador-ims/formularios/registro-familias-informe.js"></script>
-<script src="js/depurador-ims/formularios/atenciones.js"></script>
-<script src="js/depurador-ims/formularios/actividades-comunitarias.js"></script>
-<script src="js/depurador-ims/formularios/kits-nfi-wash.js"></script>
-<script src="js/depurador-ims/multiple.js"></script>
-<script src="js/depurador-ims/tablero.js"></script>
-<script src="js/depurador-ims/sitrep.js"></script>
-<script src="js/comun/datos/venezuela-estados.js"></script>
-<script src="js/comun/mapa.js"></script>
-<script src="js/depurador-ims/limpieza-registro.js"></script>
-<script src="js/comun/xlsx-escritor.js"></script>
-<script src="js/depurador-ims/limpieza-registro-exportar.js"></script>
-<script src="js/comun/tema.js"></script>
-<script src="js/proyectos/datos-proyectos.js"></script>
-<script src="js/proyectos/proyectos.js"></script>
-<script src="js/tableros/datos-tableros.js"></script>
-<script src="js/tableros/tableros.js"></script>
-<script src="js/plataforma/herramientas.js"></script>
-<script src="js/plataforma/navegacion.js"></script>
-<script src="js/inicio.js"></script>
+<script src="js/comun/utilidades.js?v=3"></script>
+<script src="js/depurador-ims/perfiles.js?v=3"></script>
+<script src="js/depurador-ims/estado.js?v=3"></script>
+<script src="js/depurador-ims/lectura.js?v=3"></script>
+<script src="js/depurador-ims/columnas.js?v=3"></script>
+<script src="js/depurador-ims/procesamiento.js?v=3"></script>
+<script src="js/depurador-ims/exportacion.js?v=3"></script>
+<script src="js/depurador-ims/interfaz.js?v=3"></script>
+<script src="js/depurador-ims/eventos.js?v=3"></script>
+<script src="js/depurador-ims/gestion-perfiles.js?v=3"></script>
+<script src="js/comun/selector-fechas.js?v=3"></script>
+<script src="js/depurador-ims/formularios/registro-familias.js?v=3"></script>
+<script src="js/depurador-ims/formularios/registro-familias-informe.js?v=3"></script>
+<script src="js/depurador-ims/formularios/atenciones.js?v=3"></script>
+<script src="js/depurador-ims/formularios/actividades-comunitarias.js?v=3"></script>
+<script src="js/depurador-ims/formularios/kits-nfi-wash.js?v=3"></script>
+<script src="js/depurador-ims/multiple.js?v=3"></script>
+<script src="js/depurador-ims/tablero.js?v=3"></script>
+<script src="js/depurador-ims/sitrep.js?v=3"></script>
+<script src="js/comun/datos/venezuela-estados.js?v=3"></script>
+<script src="js/comun/mapa.js?v=3"></script>
+<script src="js/depurador-ims/limpieza-registro.js?v=3"></script>
+<script src="js/comun/xlsx-escritor.js?v=3"></script>
+<script src="js/depurador-ims/limpieza-registro-exportar.js?v=3"></script>
+<script src="js/comun/tema.js?v=3"></script>
+<script src="js/proyectos/datos-proyectos.js?v=3"></script>
+<script src="js/proyectos/proyectos.js?v=3"></script>
+<script src="js/tableros/datos-tableros.js?v=3"></script>
+<script src="js/tableros/tableros.js?v=3"></script>
+<script src="js/plataforma/herramientas.js?v=3"></script>
+<script src="js/plataforma/navegacion.js?v=3"></script>
+<script src="js/inicio.js?v=3"></script>
 </body>
 </html>
