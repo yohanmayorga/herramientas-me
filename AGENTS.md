@@ -4,17 +4,17 @@ Este documento define las reglas obligatorias y permanentes que cualquier agente
 
 ---
 
-## 1. Enlace directo al servidor de prueba (`http://localhost:8080`)
+## 1. Enlace directo al servidor de prueba (`http://127.0.0.1:5500`)
 
 Cada vez que modifiques código de la aplicación (`index.html`, `css/**`, `js/**`):
 
-1. **No inicies el servidor local por tu cuenta**: Asume siempre que el usuario ya tiene el servidor local corriendo en `http://localhost:8080` (no ejecutes comandos para levantarlo ni verificarlo en cada turno, ya que los procesos se cierran al terminar el turno).
-2. **Incluye los enlaces directos al final de tu respuesta**: Cierra **siempre** tu respuesta con los enlaces directos a las secciones modificadas para que el usuario solo tenga que abrirlos o recargar:
-   - **Inicio / Portada (y panel de Novedades)**: `http://localhost:8080/#/inicio`
-   - **Proyectos**: `http://localhost:8080/#/proyectos`
-   - **Repositorio de tableros**: `http://localhost:8080/#/tableros`
-   - **Depurador IMS**: `http://localhost:8080/#/depurador-ims` (o `#/depurador-ims/unico`, `#/depurador-ims/multiple`, `#/depurador-ims/guia`)
-   - **Enlaces de API**: `http://localhost:8080/#/apis`
+1. **No inicies, reinicies ni mates ningún servidor en la terminal**: El usuario mantiene encendido su servidor local manualmente en `http://127.0.0.1:5500`. No ejecutes comandos para iniciar, reiniciar, verificar ni detener servidores.
+2. **Incluye siempre los enlaces directos al final de tu respuesta**: Cierra **siempre** tu respuesta con los enlaces directos usando `http://127.0.0.1:5500/#/...` hacia las secciones modificadas para que el usuario pueda recargar y probar:
+   - **Inicio / Portada (y panel de Novedades)**: `http://127.0.0.1:5500/#/inicio`
+   - **Proyectos**: `http://127.0.0.1:5500/#/proyectos`
+   - **Repositorio de tableros**: `http://127.0.0.1:5500/#/tableros`
+   - **Depurador IMS**: `http://127.0.0.1:5500/#/depurador-ims` (o `#/depurador-ims/unico`, `#/depurador-ims/multiple`, `#/depurador-ims/guia`)
+   - **Enlaces de API**: `http://127.0.0.1:5500/#/apis`
 
 ---
 
