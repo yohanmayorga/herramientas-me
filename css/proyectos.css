@@ -104,12 +104,12 @@
 .pj-tlinks .pj-link{padding:5px 7px;font-size:12px;gap:4px;white-space:nowrap}
 .pj-tlinks .pj-link svg{width:14px;height:14px}
 
-@media (max-width:1160px), (max-height:560px) and (orientation:landscape){
+@media (max-width:1160px), (max-height:600px) and (orientation:landscape){
   .pj-fbtn{display:inline-flex}
 }
 @media (max-width:1100px){ .pj-kpis{grid-template-columns:repeat(3,minmax(0,1fr))} }
 @media (max-width:900px){ .pj-kpis{grid-template-columns:repeat(2,minmax(0,1fr))} }
-@media (max-height:560px) and (orientation:landscape){
+@media (max-height:600px) and (orientation:landscape){
   .pj-kpis{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:14px}
   .pj-kpi{padding:10px 12px}
   .pj-kpi b{font-size:20px}
@@ -118,6 +118,7 @@
   .pj-grid{grid-template-columns:minmax(0,1fr)}
   .pj-kpi b{font-size:22px}
   .pj-hero{align-items:flex-start}
+  .pj-hero-side{width:100%;justify-content:space-between}
 }
 @media (max-width:420px){ .pj-prog{grid-template-columns:minmax(0,1fr)} }
 @media (prefers-reduced-motion:reduce){ .pj-card,.pj-bar i{transition:none} .pj-card:hover{transform:none} }

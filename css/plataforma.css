@@ -92,7 +92,7 @@ body.side-mini .side-i[data-tip]:hover::after{content:attr(data-tip);position:fi
 .p-list li{margin:4px 0}
 
 /* En pantallas medianas/pequeñas o teléfonos en horizontal: Novedades baja al final y Filtros pasa a panel deslizable oculto por defecto */
-@media (max-width:1160px), (max-height:560px) and (orientation:landscape){
+@media (max-width:1160px), (max-height:600px) and (orientation:landscape){
   body.en-inicio .shell,body.con-filtros .shell{grid-template-columns:var(--side-w) minmax(0,1fr)}
   body.en-inicio.side-mini .shell,body.con-filtros.side-mini .shell{grid-template-columns:var(--side-mini) minmax(0,1fr)}
   #sideNews{grid-column:2;position:static;height:auto;border-left:0;border-top:1px solid var(--line);padding:24px 32px 40px}
@@ -108,7 +108,7 @@ body.side-mini .side-i[data-tip]:hover::after{content:attr(data-tip);position:fi
 }
 
 /* Tableta y teléfono (vertical y horizontal): el menú lateral izquierdo se oculta por defecto y se abre como panel deslizable */
-@media (max-width:900px), (max-height:560px) and (orientation:landscape){
+@media (max-width:900px), (max-height:600px) and (orientation:landscape), (max-width:960px) and (orientation:landscape){
   .menu-btn{display:inline-flex}
   .shell,body.side-mini .shell,body.en-inicio .shell,body.en-inicio.side-mini .shell,body.con-filtros .shell,body.con-filtros.side-mini .shell{grid-template-columns:minmax(0,1fr)}
   .side{position:fixed;left:0;top:var(--toph);bottom:0;height:auto;width:min(280px,84vw);transform:translateX(-102%);transition:transform .2s ease;z-index:30;box-shadow:0 10px 30px rgba(0,0,0,.18)}
@@ -123,7 +123,7 @@ body.side-mini .side-i[data-tip]:hover::after{content:attr(data-tip);position:fi
   .portal{padding:20px 16px 32px}
   #sideNews{grid-column:1;padding:20px 16px 36px}
 }
-@media (max-height:560px) and (orientation:landscape){
+@media (max-height:600px) and (orientation:landscape){
   .top{padding:8px 14px;gap:10px;flex-wrap:nowrap}
   .brand small{display:none}
   .mascot{width:42px;height:30px}

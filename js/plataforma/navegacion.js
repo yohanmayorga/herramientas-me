@@ -119,6 +119,11 @@ function navInit(){
   });
   const top=document.querySelector('header.top'), setH=()=>document.documentElement.style.setProperty('--toph',top.offsetHeight+'px');
   setH(); if(window.ResizeObserver) new ResizeObserver(setH).observe(top);
+  window.addEventListener('resize',()=>{
+    const enMovilH=window.innerHeight<=600&&window.innerWidth>window.innerHeight;
+    if(window.innerWidth>900&&!enMovilH&&document.body.classList.contains('side-open')) navDrawer(false);
+    if(window.innerWidth>1160&&!enMovilH&&document.body.classList.contains('filters-open')) filterDrawer(false);
+  });
   window.addEventListener('hashchange',navRoute);
   navRoute();
 }

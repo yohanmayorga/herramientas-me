@@ -211,7 +211,7 @@ function tbOpenPreview(idx){
 function tbPaint(){
   const L=tbFiltrados(), out=$('#tbOut');
   if(!out) return;
-  if(!TBL.vistaManual) TBL.vista=(window.innerWidth<=960||(window.innerHeight<=560&&window.innerWidth>window.innerHeight))?'tarjetas':'lista';
+  if(!TBL.vistaManual) TBL.vista=(window.innerWidth<=960||(window.innerHeight<=600&&window.innerWidth>window.innerHeight))?'tarjetas':'lista';
   const resumen=tbResumen(L);
   if(!L.length){
     out.innerHTML=resumen+'<div class="p-box pj-empty">No hay tableros que coincidan con los filtros seleccionados.</div>';
