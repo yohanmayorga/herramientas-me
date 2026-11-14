@@ -94,22 +94,6 @@ function tbTabla(L){
   </table></div>`;
 }
 
-function tbResumen(L){
-  const act=L.filter(t=>tbNorm(t.estado)==='activo');
-  const gen=L.filter(t=>t.alcance==='General').length, soc=L.filter(t=>t.alcance!=='General').length;
-  const proys=[...new Set(L.map(t=>t.proyecto).filter(p=>tbNorm(p)!=='no aplica'))];
-  const em=L.filter(t=>t.tipo==='Emergencia').length, re=L.filter(t=>t.tipo==='Regular').length;
-  const freqs=[...new Set(L.map(t=>t.actualizacion))];
-  const pl=(k,a,b)=>`${k} ${k===1?a:b}`;
-  return `<div class="pj-kpis">
-    <div class="pj-kpi main"><span>Tableros</span><b>${L.length}</b><small>${gen} general · ${pl(soc,'socio','socios')}</small></div>
-    <div class="pj-kpi"><span>Activos</span><b>${act.length}</b><small>${re} regular · ${em} emergencia</small></div>
-    <div class="pj-kpi"><span>Proyectos</span><b>${proys.length}</b><small>${proys.length?esc(proys.join(', ')):(L.length?'No Aplica':'—')}</small></div>
-    <div class="pj-kpi"><span>Por socio</span><b>${soc}</b><small>${pl(gen,'tablero general','tableros generales')}</small></div>
-    <div class="pj-kpi"><span>Actualización</span><b>${freqs.length===1?esc(freqs[0]):pl(freqs.length,'frecuencia','frecuencias')}</b><small>${pl(act.length,'tablero activo','tableros activos')}</small></div>
-  </div>`;
-}
-
 function tbActiveCount(){
   return [TBL.q.trim(),TBL.proyecto,TBL.tipo,TBL.alcance,TBL.estado,TBL.actualizacion].filter(Boolean).length;
 }
@@ -181,16 +165,15 @@ function tbPaint(){
   const L=tbFiltrados(), out=$('#tbOut');
   if(!out) return;
   if(!TBL.vistaManual) TBL.vista=(window.innerWidth<=960||(window.innerHeight<=600&&window.innerWidth>window.innerHeight))?'tarjetas':'lista';
-  const resumen=tbResumen(L);
   if(!L.length){
-    out.innerHTML=resumen+'<div class="p-box pj-empty">No hay tableros que coincidan con los filtros seleccionados.</div>';
+    out.innerHTML='<div class="p-box pj-empty">No hay tableros que coincidan con los filtros seleccionados.</div>';
   } else {
-    out.innerHTML=resumen+(TBL.vista==='lista'?tbTabla(L):`<div class="pj-grid">${L.map(tbCard).join('')}</div>`);
+    out.innerHTML=TBL.vista==='lista'?tbTabla(L):`<div class="pj-grid">${L.map(tbCard).join('')}</div>`;
     if(!TBL.vistaManual&&TBL.vista==='lista'){
       const wrap=out.querySelector('.pj-tbl-wrap');
       if(wrap&&wrap.scrollWidth>wrap.clientWidth+2){
         TBL.vista='tarjetas';
-        out.innerHTML=resumen+`<div class="pj-grid">${L.map(tbCard).join('')}</div>`;
+        out.innerHTML=`<div class="pj-grid">${L.map(tbCard).join('')}</div>`;
       }
     }
   }

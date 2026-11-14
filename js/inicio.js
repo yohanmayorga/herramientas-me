@@ -1,6 +1,7 @@
 /* Herramientas M&E · Novedades de la portada y arranque de la aplicación.
    Agrega cada mejora nueva al inicio de NOVEDADES (la más reciente primero). */
 const NOVEDADES=[
+  ['Noviembre 2026','Repositorio de tableros: eliminación de las tarjetas de resumen en la parte superior para mostrar directamente el listado o las tarjetas de tableros.'],
   ['Noviembre 2026','Repositorio de formularios: incorporación de los formularios regulares del proyecto DHR para Salud Mental (SMAPS), PSS (SMAPS) y Orientación legal (Protección).'],
   ['Noviembre 2026','Repositorio de formularios: nueva sección en el bloque de Herramientas con el catálogo de formularios de KoboToolbox clasificados por proyecto, área temática y tipo (regular o emergencia), con filtros laterales, vista limpia sin tarjetas de resumen superior ni columna de enlace crudo, y botones para abrir o copiar cada formulario.'],
   ['Noviembre 2026','Depurador IMS: rediseño de la página de inicio al estilo del resto de la plataforma, con acceso directo al IMS (ims.iom.int) junto al botón «Guía de uso», tarjetas de modo a ancho completo y listado de formularios configurados.'],
