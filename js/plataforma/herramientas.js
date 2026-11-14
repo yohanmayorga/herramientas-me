@@ -27,7 +27,7 @@ const HERRAMIENTAS=[
     vista:viewProyectos, enlazar:bindProyectos },
   { id:'tableros', nombre:'Repositorio de tableros', icono:'tableros', estado:'disponible', grupo:'Información',
     resumen:'Catálogo de los tableros de Power BI desarrollados para el seguimiento de los proyectos y socios de la organización.',
-    puntos:['Filtros por proyecto, tipo, alcance (general o por socio), estado y frecuencia de actualización','Descripción breve, estado y frecuencia de actualización de cada tablero','Acceso directo a Power BI, vista previa integrada y copia rápida de enlace'],
+    puntos:['Filtros por proyecto, tipo, alcance (general o por socio), estado y frecuencia de actualización','Estado y frecuencia de actualización de cada tablero','Acceso directo a Power BI y copia rápida de enlace'],
     vista:viewTableros, enlazar:bindTableros },
   { id:'depurador-ims', nombre:'Depurador IMS', icono:'depurador', estado:'disponible', grupo:'Herramientas',
     resumen:'Valida y limpia las descargas del IMS y genera reportes, Power BI, informes PDF, tablero y SITREP.',

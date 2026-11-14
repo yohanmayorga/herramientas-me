@@ -1,4 +1,4 @@
-/* Herramientas M&E · Sección Repositorio de tableros: filtros, resumen, tarjetas, lista y vista previa */
+/* Herramientas M&E · Sección Repositorio de tableros: filtros, resumen, tarjetas y lista */
 const TBL={ q:'', proyecto:'', tipo:'', alcance:'', estado:'', actualizacion:'', vista:'lista', vistaManual:false };
 
 const TBL_ICON={
@@ -9,7 +9,6 @@ const TBL_ICON={
   general:'<circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>',
   proyecto:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/>',
   copiar:'<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
-  ojo:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
   filtro:'<path d="M3 5h18M6 12h12M10 19h4"/>',
   tarjetas:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   lista:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>'
@@ -60,7 +59,6 @@ function tbCard(t){
     </div>
     <div class="tb-actions">
       <a class="pj-link primary" href="${esc(t.url)}" target="_blank" rel="noopener noreferrer" title="Abrir tablero en una pestaña nueva">${tbIco('ext',15)}<span>Abrir tablero</span></a>
-      <button class="pj-link" type="button" data-preview="${t._idx}" title="Abrir vista previa del tablero aquí">${tbIco('ojo',15)}<span>Vista previa</span></button>
       <button class="pj-link icon-only" type="button" data-copy="${esc(t.url)}" title="Copiar enlace del tablero" aria-label="Copiar enlace de ${esc(t.nombre)}">${tbIco('copiar',15)}</button>
     </div>
   </article>`;
@@ -74,7 +72,6 @@ function tbTabla(L){
       <th>Alcance / Socio</th>
       <th>Estado</th>
       <th>Actualización</th>
-      <th>Descripción</th>
       <th>Acciones</th>
     </tr></thead>
     <tbody>${L.map(t=>{
@@ -85,11 +82,9 @@ function tbTabla(L){
         <td><span class="tb-alc${esGen?' gen':''}">${esc(esGen?'General':t.socio||'Socio')}</span></td>
         <td><span class="pj-st ${ec}">${esc(t.estado)}</span></td>
         <td><span class="tb-tfreq">${tbIco('reloj',14)}${esc(t.actualizacion)}</span></td>
-        <td class="tb-tdesc">${esc(t.descripcion)}</td>
         <td>
           <div class="pj-tlinks">
             <a class="pj-link primary" href="${esc(t.url)}" target="_blank" rel="noopener noreferrer" title="Abrir tablero en una pestaña nueva">${tbIco('ext',14)}<span>Abrir</span></a>
-            <button class="pj-link" type="button" data-preview="${t._idx}" title="Vista previa integrada">${tbIco('ojo',14)}<span>Vista previa</span></button>
             <button class="pj-link" type="button" data-copy="${esc(t.url)}" title="Copiar enlace">${tbIco('copiar',14)}<span>Copiar</span></button>
           </div>
         </td>
@@ -158,20 +153,6 @@ function viewTableros(){
       </div>
     </section>
     <div id="tbOut"></div>
-    <dialog class="tb-dlg" id="tbPreviewDlg" aria-labelledby="tbDlgTitle">
-      <div class="tb-dlg-h">
-        <div class="tb-dlg-title">
-          <strong id="tbDlgTitle"></strong>
-          <span class="pj-st ok" id="tbDlgMeta"></span>
-        </div>
-        <div class="tb-dlg-acts">
-          <button class="btn sm" type="button" id="tbDlgCopy">${tbIco('copiar',14)} Copiar enlace</button>
-          <a class="btn sm primary" id="tbDlgExt" href="#" target="_blank" rel="noopener noreferrer">${tbIco('ext',14)} Abrir en pestaña nueva</a>
-          <button class="btn sm" type="button" id="tbDlgClose">Cerrar</button>
-        </div>
-      </div>
-      <div class="tb-dlg-b"><iframe id="tbDlgFrame" title="Vista previa del tablero de Power BI" allowfullscreen></iframe></div>
-    </dialog>
   </div>`;
 }
 
@@ -193,19 +174,6 @@ function tbCopyFallback(url){
   document.body.appendChild(ta); ta.select();
   try{ document.execCommand('copy'); toast('Enlace del tablero copiado al portapapeles'); }catch(e){}
   ta.remove();
-}
-
-function tbOpenPreview(idx){
-  const t=TABLEROS[idx], dlg=$('#tbPreviewDlg');
-  if(!t||!dlg) return;
-  $('#tbDlgTitle').textContent=t.nombre;
-  const meta=$('#tbDlgMeta');
-  meta.textContent=`${t.proyecto} ${t.tipo.toLowerCase()} · ${t.actualizacion}`;
-  meta.className=`pj-st ${tbEstadoClase(t.estado)}`;
-  $('#tbDlgExt').href=t.url;
-  $('#tbDlgCopy').onclick=()=>tbCopyUrl(t.url);
-  $('#tbDlgFrame').src=t.url;
-  dlg.showModal();
 }
 
 function tbPaint(){
@@ -230,7 +198,6 @@ function tbPaint(){
   const cl=$('#tbClear'); if(cl) cl.hidden=!n;
   const fc=$('#tbFCount'); if(fc){ fc.textContent=n; fc.hidden=!n; }
   out.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>tbCopyUrl(b.dataset.copy));
-  out.querySelectorAll('[data-preview]').forEach(b=>b.onclick=()=>tbOpenPreview(Number(b.dataset.preview)));
 }
 
 let tbResizeObs=null;
@@ -254,13 +221,6 @@ function bindTableros(){
     $('#home').innerHTML=viewTableros();
     bindTableros();
   };
-  const dlg=$('#tbPreviewDlg');
-  if(dlg){
-    const closeDlg=()=>{ $('#tbDlgFrame').src='about:blank'; dlg.close(); };
-    $('#tbDlgClose').onclick=closeDlg;
-    dlg.addEventListener('close',()=>{ const f=$('#tbDlgFrame'); if(f) f.src='about:blank'; });
-    dlg.addEventListener('click',e=>{ if(e.target===dlg) closeDlg(); });
-  }
   if(tbResizeObs) tbResizeObs.disconnect();
   if(window.ResizeObserver){
     let lastW=0;
