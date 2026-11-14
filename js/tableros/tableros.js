@@ -1,0 +1,250 @@
+/* Herramientas M&E · Sección Repositorio de tableros: filtros, resumen, tarjetas, lista y vista previa */
+const TBL={ q:'', proyecto:'', tipo:'', alcance:'', estado:'', actualizacion:'', vista:'lista', vistaManual:false };
+
+const TBL_ICON={
+  ext:'<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  buscar:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  reloj:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  socio:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  general:'<circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>',
+  proyecto:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/>',
+  copiar:'<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  ojo:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+  tarjetas:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  lista:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>'
+};
+const tbIco=(n,s=16)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${TBL_ICON[n]||''}</svg>`;
+const tbNorm=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+
+function tbEstadoClase(est){
+  const e=tbNorm(est);
+  if(e==='activo'||e==='vigente') return 'ok';
+  if(e==='en desarrollo'||e==='pausado') return 'warn';
+  return 'off';
+}
+
+function tbFiltrados(){
+  const q=tbNorm(TBL.q.trim());
+  return TABLEROS.map((t,idx)=>({...t,_idx:idx})).filter(t=>{
+    if(q&&!tbNorm(`${t.nombre} ${t.proyecto} ${t.tipo} ${t.socio||''} ${t.alcance||''} ${t.descripcion||''} ${t.actualizacion||''} ${t.estado||''}`).includes(q)) return false;
+    if(TBL.proyecto&&t.proyecto!==TBL.proyecto) return false;
+    if(TBL.tipo&&t.tipo!==TBL.tipo) return false;
+    if(TBL.alcance&&t.alcance!==TBL.alcance) return false;
+    if(TBL.estado&&t.estado!==TBL.estado) return false;
+    if(TBL.actualizacion&&t.actualizacion!==TBL.actualizacion) return false;
+    return true;
+  });
+}
+
+function tbCard(t){
+  const ec=tbEstadoClase(t.estado), done=ec==='off';
+  const esGen=t.alcance==='General';
+  return `<article class="pj-card t-${t.tipo==='Emergencia'?'em':'re'}${done?' done':''}">
+    <div class="pj-top">
+      <span class="pj-tipo">${esc(t.proyecto)} · ${esc(t.tipo)}</span>
+      <span class="pj-st ${ec}">${esc(t.estado)}</span>
+    </div>
+    <h3>${esc(t.nombre)}</h3>
+    <div class="tb-sub">${tbIco(esGen?'general':'socio',14)}<span>${esc(esGen?'Consolidado general del proyecto':`Socio: ${t.socio||t.nombre}`)}</span></div>
+    <p class="tb-desc">${esc(t.descripcion)}</p>
+    <div class="tb-meta">
+      <div class="tb-mitem">
+        <span>${tbIco('proyecto',13)} Proyecto</span>
+        <b title="Proyecto ${esc(t.proyecto)} ${esc(t.tipo.toLowerCase())}">Proyecto ${esc(t.proyecto)} ${esc(t.tipo.toLowerCase())}</b>
+      </div>
+      <div class="tb-mitem">
+        <span>${tbIco('reloj',13)} Actualizaciones</span>
+        <b title="${esc(t.actualizacion)}">${esc(t.actualizacion)}</b>
+      </div>
+    </div>
+    <div class="tb-actions">
+      <a class="pj-link primary" href="${esc(t.url)}" target="_blank" rel="noopener noreferrer" title="Abrir tablero en una pestaña nueva">${tbIco('ext',15)}<span>Abrir tablero</span></a>
+      <button class="pj-link" type="button" data-preview="${t._idx}" title="Abrir vista previa del tablero aquí">${tbIco('ojo',15)}<span>Vista previa</span></button>
+      <button class="pj-link icon-only" type="button" data-copy="${esc(t.url)}" title="Copiar enlace del tablero" aria-label="Copiar enlace de ${esc(t.nombre)}">${tbIco('copiar',15)}</button>
+    </div>
+  </article>`;
+}
+
+function tbTabla(L){
+  return `<div class="scroll pj-tbl-wrap"><table class="pj-tbl">
+    <thead><tr>
+      <th>Tablero</th>
+      <th>Proyecto</th>
+      <th>Alcance / Socio</th>
+      <th>Estado</th>
+      <th>Actualización</th>
+      <th>Descripción</th>
+      <th>Acciones</th>
+    </tr></thead>
+    <tbody>${L.map(t=>{
+      const ec=tbEstadoClase(t.estado), done=ec==='off', esGen=t.alcance==='General';
+      return `<tr class="t-${t.tipo==='Emergencia'?'em':'re'}${done?' done':''}">
+        <td><div class="pj-tn">${esc(t.nombre)}</div></td>
+        <td><span class="pj-tipo">${esc(t.proyecto)} · ${esc(t.tipo)}</span></td>
+        <td><span class="tb-alc${esGen?' gen':''}">${esc(esGen?'General':t.socio||'Socio')}</span></td>
+        <td><span class="pj-st ${ec}">${esc(t.estado)}</span></td>
+        <td><span class="tb-tfreq">${tbIco('reloj',14)}${esc(t.actualizacion)}</span></td>
+        <td class="tb-tdesc">${esc(t.descripcion)}</td>
+        <td>
+          <div class="pj-tlinks">
+            <a class="pj-link primary" href="${esc(t.url)}" target="_blank" rel="noopener noreferrer" title="Abrir tablero en una pestaña nueva">${tbIco('ext',14)}<span>Abrir</span></a>
+            <button class="pj-link" type="button" data-preview="${t._idx}" title="Vista previa integrada">${tbIco('ojo',14)}<span>Vista previa</span></button>
+            <button class="pj-link" type="button" data-copy="${esc(t.url)}" title="Copiar enlace">${tbIco('copiar',14)}<span>Copiar</span></button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div>`;
+}
+
+function tbResumen(L){
+  const act=L.filter(t=>tbNorm(t.estado)==='activo');
+  const gen=L.filter(t=>t.alcance==='General').length, soc=L.filter(t=>t.alcance!=='General').length;
+  const proys=[...new Set(L.map(t=>t.proyecto))];
+  const em=L.filter(t=>t.tipo==='Emergencia').length, re=L.filter(t=>t.tipo==='Regular').length;
+  const freqs=[...new Set(L.map(t=>t.actualizacion))];
+  const pl=(k,a,b)=>`${k} ${k===1?a:b}`;
+  return `<div class="pj-kpis">
+    <div class="pj-kpi main"><span>Tableros</span><b>${L.length}</b><small>${gen} general · ${pl(soc,'socio','socios')}</small></div>
+    <div class="pj-kpi"><span>Activos</span><b>${act.length}</b><small>${re} regular · ${em} emergencia</small></div>
+    <div class="pj-kpi"><span>Proyectos</span><b>${proys.length}</b><small>${proys.length?esc(proys.join(', ')):'—'}</small></div>
+    <div class="pj-kpi"><span>Por socio</span><b>${soc}</b><small>${pl(gen,'tablero general','tableros generales')}</small></div>
+    <div class="pj-kpi"><span>Actualización</span><b>${freqs.length===1?esc(freqs[0]):pl(freqs.length,'frecuencia','frecuencias')}</b><small>${pl(act.length,'tablero activo','tableros activos')}</small></div>
+  </div>`;
+}
+
+function viewTableros(){
+  const opt=(v,l,cur)=>`<option value="${esc(v)}"${cur===v?' selected':''}>${esc(l)}</option>`;
+  const seg=(k,vals)=>`<div class="pj-seg" role="group">${vals.map(([v,l,ic])=>`<button type="button" data-k="${k}" data-v="${v}" aria-pressed="${TBL[k]===v}">${ic?tbIco(ic,15):''}<span>${l}</span></button>`).join('')}</div>`;
+  const proys=[...new Set(TABLEROS.map(t=>t.proyecto))];
+  const estados=[...new Set(['Activo','Finalizado',...TABLEROS.map(t=>t.estado)])];
+  const acts=[...new Set(TABLEROS.map(t=>t.actualizacion))];
+  const hayFiltros=Boolean(TBL.q||TBL.proyecto||TBL.tipo||TBL.alcance||TBL.estado||TBL.actualizacion);
+  return `<div class="portal pj tb">
+    <section class="p-hero pj-hero">
+      <div>
+        <h1>Repositorio de tableros</h1>
+        <p>Listado de tableros desarrollados en Power BI para el seguimiento de los proyectos de la organización y sus socios implementadores.</p>
+      </div>
+      <div class="pj-today">${tbIco('reloj',15)} Power BI · Seguimiento de proyectos</div>
+    </section>
+    <div class="pj-filters" role="search">
+      <label class="pj-search">${tbIco('buscar',18)}<input class="in" id="tbQ" type="search" placeholder="Buscar por tablero, socio, proyecto o descripción" value="${esc(TBL.q)}" aria-label="Buscar tableros"></label>
+      <label class="pj-fg"><span class="pj-fl">Proyecto</span><select class="in" id="tbProyecto">${opt('','Todos',TBL.proyecto)}${proys.map(p=>opt(p,p,TBL.proyecto)).join('')}</select></label>
+      <div class="pj-fg"><span class="pj-fl">Tipo</span>${seg('tipo',[['','Todos'],['Regular','Regular'],['Emergencia','Emergencia']])}</div>
+      <div class="pj-fg"><span class="pj-fl">Alcance</span>${seg('alcance',[['','Todos'],['General','General'],['Socio','Por socio']])}</div>
+      <label class="pj-fg"><span class="pj-fl">Estado</span><select class="in" id="tbEstado">${opt('','Todos',TBL.estado)}${estados.map(e=>opt(e,e,TBL.estado)).join('')}</select></label>
+      <label class="pj-fg"><span class="pj-fl">Actualización</span><select class="in" id="tbAct">${opt('','Todas',TBL.actualizacion)}${acts.map(a=>opt(a,a,TBL.actualizacion)).join('')}</select></label>
+      <div class="pj-fg"><span class="pj-fl">Vista</span>${seg('vista',[['lista','Lista','lista'],['tarjetas','Tarjetas','tarjetas']])}</div>
+      <button class="btn sm pj-clear" type="button" id="tbClear"${hayFiltros?'':' hidden'}>Limpiar filtros</button>
+    </div>
+    <div id="tbOut"></div>
+    <dialog class="tb-dlg" id="tbPreviewDlg" aria-labelledby="tbDlgTitle">
+      <div class="tb-dlg-h">
+        <div class="tb-dlg-title">
+          <strong id="tbDlgTitle"></strong>
+          <span class="pj-st ok" id="tbDlgMeta"></span>
+        </div>
+        <div class="tb-dlg-acts">
+          <button class="btn sm" type="button" id="tbDlgCopy">${tbIco('copiar',14)} Copiar enlace</button>
+          <a class="btn sm primary" id="tbDlgExt" href="#" target="_blank" rel="noopener noreferrer">${tbIco('ext',14)} Abrir en pestaña nueva</a>
+          <button class="btn sm" type="button" id="tbDlgClose">Cerrar</button>
+        </div>
+      </div>
+      <div class="tb-dlg-b"><iframe id="tbDlgFrame" title="Vista previa del tablero de Power BI" allowfullscreen></iframe></div>
+    </dialog>
+  </div>`;
+}
+
+function tbSyncVistaBtns(){
+  document.querySelectorAll('.tb .pj-seg button[data-k="vista"]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.v===TBL.vista));
+}
+
+function tbCopyUrl(url){
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(()=>toast('Enlace del tablero copiado al portapapeles')).catch(()=>tbCopyFallback(url));
+  } else {
+    tbCopyFallback(url);
+  }
+}
+
+function tbCopyFallback(url){
+  const ta=document.createElement('textarea');
+  ta.value=url; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); toast('Enlace del tablero copiado al portapapeles'); }catch(e){}
+  ta.remove();
+}
+
+function tbOpenPreview(idx){
+  const t=TABLEROS[idx], dlg=$('#tbPreviewDlg');
+  if(!t||!dlg) return;
+  $('#tbDlgTitle').textContent=t.nombre;
+  const meta=$('#tbDlgMeta');
+  meta.textContent=`${t.proyecto} ${t.tipo.toLowerCase()} · ${t.actualizacion}`;
+  meta.className=`pj-st ${tbEstadoClase(t.estado)}`;
+  $('#tbDlgExt').href=t.url;
+  $('#tbDlgCopy').onclick=()=>tbCopyUrl(t.url);
+  $('#tbDlgFrame').src=t.url;
+  dlg.showModal();
+}
+
+function tbPaint(){
+  const L=tbFiltrados(), out=$('#tbOut');
+  if(!out) return;
+  if(!TBL.vistaManual) TBL.vista=window.innerWidth<=960?'tarjetas':'lista';
+  const resumen=tbResumen(L);
+  if(!L.length){
+    out.innerHTML=resumen+'<div class="p-box pj-empty">No hay tableros que coincidan con los filtros seleccionados.</div>';
+  } else {
+    out.innerHTML=resumen+(TBL.vista==='lista'?tbTabla(L):`<div class="pj-grid">${L.map(tbCard).join('')}</div>`);
+    if(!TBL.vistaManual&&TBL.vista==='lista'){
+      const wrap=out.querySelector('.pj-tbl-wrap');
+      if(wrap&&wrap.scrollWidth>wrap.clientWidth+2){
+        TBL.vista='tarjetas';
+        out.innerHTML=resumen+`<div class="pj-grid">${L.map(tbCard).join('')}</div>`;
+      }
+    }
+  }
+  tbSyncVistaBtns();
+  const hayFiltros=Boolean(TBL.q||TBL.proyecto||TBL.tipo||TBL.alcance||TBL.estado||TBL.actualizacion);
+  $('#tbClear').hidden=!hayFiltros;
+  out.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>tbCopyUrl(b.dataset.copy));
+  out.querySelectorAll('[data-preview]').forEach(b=>b.onclick=()=>tbOpenPreview(Number(b.dataset.preview)));
+}
+
+let tbResizeObs=null;
+function bindTableros(){
+  $('#tbQ').addEventListener('input',e=>{ TBL.q=e.target.value; tbPaint(); });
+  document.querySelectorAll('.tb .pj-seg button').forEach(b=>b.onclick=()=>{
+    if(b.dataset.k==='vista') TBL.vistaManual=true;
+    TBL[b.dataset.k]=b.dataset.v;
+    document.querySelectorAll(`.tb .pj-seg button[data-k="${b.dataset.k}"]`).forEach(x=>x.setAttribute('aria-pressed',x===b));
+    tbPaint();
+  });
+  $('#tbProyecto').onchange=e=>{ TBL.proyecto=e.target.value; tbPaint(); };
+  $('#tbEstado').onchange=e=>{ TBL.estado=e.target.value; tbPaint(); };
+  $('#tbAct').onchange=e=>{ TBL.actualizacion=e.target.value; tbPaint(); };
+  $('#tbClear').onclick=()=>{
+    Object.assign(TBL,{q:'',proyecto:'',tipo:'',alcance:'',estado:'',actualizacion:'',vistaManual:false});
+    $('#home').innerHTML=viewTableros();
+    bindTableros();
+  };
+  const dlg=$('#tbPreviewDlg');
+  if(dlg){
+    const closeDlg=()=>{ $('#tbDlgFrame').src='about:blank'; dlg.close(); };
+    $('#tbDlgClose').onclick=closeDlg;
+    dlg.addEventListener('close',()=>{ const f=$('#tbDlgFrame'); if(f) f.src='about:blank'; });
+    dlg.addEventListener('click',e=>{ if(e.target===dlg) closeDlg(); });
+  }
+  if(tbResizeObs) tbResizeObs.disconnect();
+  if(window.ResizeObserver){
+    let lastW=0;
+    tbResizeObs=new ResizeObserver(entries=>{
+      const w=Math.round(entries[0]?.contentRect?.width||0);
+      if(w&&w!==lastW){ lastW=w; if(!TBL.vistaManual) tbPaint(); }
+    });
+    tbResizeObs.observe($('#tbOut'));
+  }
+  tbPaint();
+}

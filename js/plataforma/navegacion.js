@@ -1,12 +1,17 @@
 /* Herramientas M&E · Navegación: menú lateral, rutas (#/...) y portada */
 const NAV_KEY='herramientas-me-menu';
-const NAV={ ruta:'inicio', manual:null };
+const NAV={ ruta:'inicio', manual:false, gruposCerrados:new Set() };
 
 function navSide(){
   const item=(id,nombre,ic,extra='')=>`<a class="side-i${NAV.ruta===id?' on':''}" href="#/${id}" data-tip="${esc(nombre)}"${NAV.ruta===id?' aria-current="page"':''}>${icono(ic)}<span class="side-t">${esc(nombre)}</span>${extra}</a>`;
   return `<div class="side-sec">${item('inicio','Inicio','inicio')}</div>
-    ${[...new Set(HERRAMIENTAS.map(h=>h.grupo))].map(g=>`<div class="side-sec"><div class="side-h">${esc(g)}</div>
-      ${HERRAMIENTAS.filter(h=>h.grupo===g).map(h=>item(h.id,h.nombre,h.icono,h.estado==='disponible'?'':'<span class="side-b">Pronto</span>')).join('')}</div>`).join('')}
+    ${[...new Set(HERRAMIENTAS.map(h=>h.grupo))].map(g=>{
+      const cerrado=NAV.gruposCerrados.has(g)&&!navCollapsed();
+      return `<div class="side-sec${cerrado?' closed':''}">
+        <button class="side-h side-gh" type="button" data-grupo="${esc(g)}" aria-expanded="${!cerrado}" title="${cerrado?'Expandir':'Contraer'} ${esc(g)}"><span>${esc(g)}</span>${icono('abajo',14)}</button>
+        <div class="side-items"${cerrado?' hidden':''}>${HERRAMIENTAS.filter(h=>h.grupo===g).map(h=>item(h.id,h.nombre,h.icono,h.estado==='disponible'?'':'<span class="side-b">Pronto</span>')).join('')}</div>
+      </div>`;
+    }).join('')}
     <button class="side-i side-tog" type="button" id="sideTog" aria-label="${navCollapsed()?'Expandir menú':'Contraer menú'}" title="${navCollapsed()?'Expandir menú':'Contraer menú'}">${icono(navCollapsed()?'expandir':'contraer')}<span class="side-t">Contraer menú</span></button>`;
 }
 
@@ -26,17 +31,12 @@ function viewPortada(){
       <div class="p-cf">${h.estado==='disponible'
         ?`<a class="btn primary" href="#/${h.id}">Abrir ${icono('flecha',16)}</a>${(h.accesos||[]).length?`<div class="p-acc">${h.accesos.map(([l,u])=>`<a href="${u}">${esc(l)}</a>`).join('')}</div>`:''}`
         :`<a class="btn" href="#/${h.id}">Ver detalles</a>`}</div>
-    </article>`).join('')}</div>
-    <div class="p-row">
-      <section class="p-box"><h2 class="p-title">Novedades</h2>
-        <ol class="p-news">${NOVEDADES.map(([f,t])=>`<li><span>${esc(f)}</span>${esc(t)}</li>`).join('')}</ol></section>
-      <section class="p-box"><h2 class="p-title">Cómo funcionan</h2>
-        <ul class="p-facts">
-          <li>${icono('candado')}<div><b>Tus datos no salen de tu equipo</b>Los archivos se procesan en el navegador; no se envían a ningún servidor.</div></li>
-          <li>${icono('rayo')}<div><b>Sin instalación</b>Funcionan desde el navegador, en computadora, tableta o teléfono.</div></li>
-          <li>${icono('archivo')}<div><b>Resultados listos para usar</b>Excel, Power BI, PDF y tableros con el estilo de la OIM.</div></li>
-        </ul></section>
-    </div></div>`;
+    </article>`).join('')}</div></div>`;
+}
+
+function viewSideNews(){
+  return `<div class="side-h">Novedades</div>
+    <ol class="p-news">${NOVEDADES.map(([f,t])=>`<li><span>${esc(f)}</span>${esc(t)}</li>`).join('')}</ol>`;
 }
 
 function viewProximamente(h){
@@ -46,14 +46,25 @@ function viewProximamente(h){
     <p class="muted" style="margin:14px 0 0">Esta herramienta está en preparación. Para sugerencias, escribe a <a href="mailto:ymayorga@iom.int">ymayorga@iom.int</a>.</p></section></div>`;
 }
 
-function navCollapsed(){ return NAV.manual!=null?NAV.manual:NAV.ruta!=='inicio'; }
+function navCollapsed(){ return Boolean(NAV.manual); }
 
 function navApply(){
-  const side=$('#side'), home=$('#home'), wrap=document.querySelector('.wrap'), h=HERRAMIENTAS.find(x=>x.id===NAV.ruta);
+  const side=$('#side'), sideNews=$('#sideNews'), home=$('#home'), wrap=document.querySelector('.wrap'), h=HERRAMIENTAS.find(x=>x.id===NAV.ruta);
+  const enInicio=!h;
   document.body.classList.toggle('side-mini',navCollapsed());
+  document.body.classList.toggle('en-inicio',enInicio);
   side.innerHTML=navSide();
-  $('#sideTog').onclick=()=>{ NAV.manual=!navCollapsed(); try{ localStorage.setItem(NAV_KEY,NAV.manual?'1':'0'); }catch(e){} navApply(); };
+  $('#sideTog').onclick=()=>{ NAV.manual=!navCollapsed(); navApply(); };
+  side.querySelectorAll('.side-gh').forEach(b=>b.onclick=()=>{
+    const g=b.dataset.grupo;
+    if(NAV.gruposCerrados.has(g)) NAV.gruposCerrados.delete(g); else NAV.gruposCerrados.add(g);
+    navApply();
+  });
   side.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>navDrawer(false)));
+  if(sideNews){
+    sideNews.hidden=!enInicio;
+    if(enInicio) sideNews.innerHTML=viewSideNews();
+  }
   const enDep=NAV.ruta==='depurador-ims';
   $('#btnGuide').hidden=!enDep;
   wrap.hidden=!enDep; home.hidden=enDep;
@@ -72,7 +83,7 @@ function navRoute(){
     else { S.guide=false; S.dash=false; if(S.step===1) S.loadMode=parts[1]==='multiple'?'multi':'single'; }
     history.replaceState(null,'','#/depurador-ims');
   }
-  if(ruta!==NAV.ruta){ NAV.ruta=ruta; let m=null; try{ m=localStorage.getItem(NAV_KEY); }catch(e){} NAV.manual=m==null?null:m==='1'; if(ruta==='inicio') NAV.manual=null; }
+  NAV.ruta=ruta;
   navApply();
 }
 

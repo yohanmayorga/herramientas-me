@@ -6,8 +6,9 @@ Todo el procesamiento ocurre en el navegador: los archivos cargados no salen del
 ## Módulos
 | Módulo | Estado | Carpeta |
 |---|---|---|
+| Proyectos | En uso | `js/proyectos/` |
 | Depurador IMS | En uso | `js/depurador-ims/` |
-| Repositorio de tableros | Planificado | — |
+| Repositorio de tableros | En uso | `js/tableros/` |
 | Enlaces de API | Planificado | — |
 
 ## Estructura
