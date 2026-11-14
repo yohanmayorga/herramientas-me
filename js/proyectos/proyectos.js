@@ -8,6 +8,7 @@ const PRJ_ICON={
   ext:'<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
   buscar:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  filtro:'<path d="M3 5h18M6 12h12M10 19h4"/>',
   tarjetas:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   lista:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>'
 };
@@ -132,21 +133,40 @@ function prjResumen(L){
   </div>`;
 }
 
-function viewProyectos(){
+function prjActiveCount(){
+  return [PRJ.q.trim(),PRJ.tipo,PRJ.moneda,PRJ.estado].filter(Boolean).length;
+}
+
+function viewProyectosFiltros(){
   const opt=(v,l,cur)=>`<option value="${v}"${cur===v?' selected':''}>${l}</option>`;
   const seg=(k,vals)=>`<div class="pj-seg" role="group">${vals.map(([v,l,ic])=>`<button type="button" data-k="${k}" data-v="${v}" aria-pressed="${PRJ[k]===v}">${ic?prjIco(ic,15):''}<span>${l}</span></button>`).join('')}</div>`;
-  return `<div class="portal pj">
-    <section class="p-hero pj-hero"><div><h1>Proyectos</h1><p>Proyectos de la oficina, con su plazo, presupuesto y enlaces a PRIMA, la matriz de monitoreo y la carpeta en SharePoint.</p></div>
-      <div class="pj-today">${prjIco('cal',15)} Avance calculado al ${new Date().toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'})}</div></section>
-    <div class="pj-filters" role="search">
+  const n=prjActiveCount();
+  return `<div class="sf-wrap pj" role="search">
+    <div class="side-h sf-head"><span>Filtros</span><button class="btn sm sf-close" type="button" data-fclose aria-label="Cerrar filtros">✕</button></div>
+    <div class="sf-body">
       <label class="pj-search">${prjIco('buscar',18)}<input class="in" id="pjQ" type="search" placeholder="Buscar por proyecto o código" value="${esc(PRJ.q)}" aria-label="Buscar por proyecto o código"></label>
       <div class="pj-fg"><span class="pj-fl">Tipo</span>${seg('tipo',[['','Todos'],['Emergencia','Emergencia'],['Regular','Regular']])}</div>
       <div class="pj-fg"><span class="pj-fl">Moneda</span>${seg('moneda',[['','Todas'],['USD','USD'],['EUR','EUR']])}</div>
       <label class="pj-fg"><span class="pj-fl">Estado</span><select class="in" id="pjEstado">${opt('','Todos',PRJ.estado)}${opt('vigente','Vigentes',PRJ.estado)}${opt('porFinalizar','Por finalizar',PRJ.estado)}${opt('porIniciar','Por iniciar',PRJ.estado)}${opt('finalizado','Finalizados',PRJ.estado)}</select></label>
       <label class="pj-fg"><span class="pj-fl">Ordenar por</span><select class="in" id="pjOrden">${opt('fin','Fecha de fin más próxima',PRJ.orden)}${opt('inicio','Inicio más reciente',PRJ.orden)}${opt('avance','Mayor avance del plazo',PRJ.orden)}${opt('monto','Mayor presupuesto',PRJ.orden)}${opt('nombre','Nombre (A–Z)',PRJ.orden)}</select></label>
       <div class="pj-fg"><span class="pj-fl">Vista</span>${seg('vista',[['lista','Lista','lista'],['tarjetas','Tarjetas','tarjetas']])}</div>
-      <button class="btn sm pj-clear" type="button" id="pjClear"${PRJ.q||PRJ.tipo||PRJ.moneda||PRJ.estado?'':' hidden'}>Limpiar filtros</button>
     </div>
+    <div class="sf-foot">
+      <button class="btn sm pj-clear" type="button" id="pjClear"${n?'':' hidden'}>Limpiar filtros</button>
+      <button class="btn sm primary sf-done" type="button" data-fclose>Ver resultados</button>
+    </div>
+  </div>`;
+}
+
+function viewProyectos(){
+  const n=prjActiveCount();
+  const open=document.body.classList.contains('filters-open');
+  return `<div class="portal pj">
+    <section class="p-hero pj-hero"><div><h1>Proyectos</h1><p>Proyectos de la oficina, con su plazo, presupuesto y enlaces a PRIMA, la matriz de monitoreo y la carpeta en SharePoint.</p></div>
+      <div class="pj-hero-side">
+        <div class="pj-today">${prjIco('cal',15)} Avance calculado al ${new Date().toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'})}</div>
+        <button class="btn pj-fbtn" type="button" data-fopen aria-expanded="${open}" aria-controls="sideFilters">${prjIco('filtro',16)}<span>Filtros</span><span class="fcount" id="pjFCount"${n?'':' hidden'}>${n}</span></button>
+      </div></section>
     <div id="pjOut"></div></div>`;
 }
 
@@ -157,7 +177,7 @@ function prjSyncVistaBtns(){
 function prjPaint(){
   const L=prjFiltrados(), out=$('#pjOut');
   if(!out) return;
-  if(!PRJ.vistaManual) PRJ.vista=window.innerWidth<=960?'tarjetas':'lista';
+  if(!PRJ.vistaManual) PRJ.vista=(window.innerWidth<=960||(window.innerHeight<=560&&window.innerWidth>window.innerHeight))?'tarjetas':'lista';
   const resumen=prjResumen(L);
   if(!L.length){
     out.innerHTML=resumen+'<div class="p-box pj-empty">No hay proyectos que coincidan con los filtros seleccionados.</div>';
@@ -172,11 +192,17 @@ function prjPaint(){
     }
   }
   prjSyncVistaBtns();
-  $('#pjClear').hidden=!(PRJ.q||PRJ.tipo||PRJ.moneda||PRJ.estado);
+  const n=prjActiveCount();
+  const cl=$('#pjClear'); if(cl) cl.hidden=!n;
+  const fc=$('#pjFCount'); if(fc){ fc.textContent=n; fc.hidden=!n; }
 }
 
 let prjResizeObs=null;
 function bindProyectos(){
+  const sf=$('#sideFilters');
+  if(sf) sf.innerHTML=viewProyectosFiltros();
+  document.querySelectorAll('[data-fopen]').forEach(b=>b.onclick=()=>filterDrawer(!document.body.classList.contains('filters-open')));
+  document.querySelectorAll('[data-fclose]').forEach(b=>b.onclick=()=>filterDrawer(false));
   $('#pjQ').addEventListener('input',e=>{ PRJ.q=e.target.value; prjPaint(); });
   document.querySelectorAll('.pj-seg button').forEach(b=>b.onclick=()=>{
     if(b.dataset.k==='vista') PRJ.vistaManual=true;

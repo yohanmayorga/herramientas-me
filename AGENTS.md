@@ -4,17 +4,17 @@ Este documento define las reglas obligatorias y permanentes que cualquier agente
 
 ---
 
-## 1. Servidor de prueba y enlace directo
+## 1. Enlace directo al servidor de prueba (`http://localhost:8080`)
 
 Cada vez que modifiques código de la aplicación (`index.html`, `css/**`, `js/**`):
 
-1. **Verifica o inicia el servidor local**: Asegúrate de que haya un servidor HTTP local activo sirviendo la raíz del proyecto (en Windows, inícialo fuera del sandbox con `BypassSandbox: true` e `IsDaemon: true` para que sea accesible desde el navegador del usuario, por ejemplo en `http://localhost:8080`).
-2. **Incluye el enlace directo al final de tu respuesta**: Cierra **siempre** tu respuesta con el enlace directo a la sección modificada para que el usuario pueda probar el cambio con un clic:
-   - **Inicio / Portada (y panel de Novedades)**: `http://localhost:<PUERTO>/#/inicio`
-   - **Proyectos**: `http://localhost:<PUERTO>/#/proyectos`
-   - **Repositorio de tableros**: `http://localhost:<PUERTO>/#/tableros`
-   - **Depurador IMS**: `http://localhost:<PUERTO>/#/depurador-ims` (o `#/depurador-ims/unico`, `#/depurador-ims/multiple`, `#/depurador-ims/guia`)
-   - **Enlaces de API**: `http://localhost:<PUERTO>/#/apis`
+1. **No inicies el servidor local por tu cuenta**: Asume siempre que el usuario ya tiene el servidor local corriendo en `http://localhost:8080` (no ejecutes comandos para levantarlo ni verificarlo en cada turno, ya que los procesos se cierran al terminar el turno).
+2. **Incluye los enlaces directos al final de tu respuesta**: Cierra **siempre** tu respuesta con los enlaces directos a las secciones modificadas para que el usuario solo tenga que abrirlos o recargar:
+   - **Inicio / Portada (y panel de Novedades)**: `http://localhost:8080/#/inicio`
+   - **Proyectos**: `http://localhost:8080/#/proyectos`
+   - **Repositorio de tableros**: `http://localhost:8080/#/tableros`
+   - **Depurador IMS**: `http://localhost:8080/#/depurador-ims` (o `#/depurador-ims/unico`, `#/depurador-ims/multiple`, `#/depurador-ims/guia`)
+   - **Enlaces de API**: `http://localhost:8080/#/apis`
 
 ---
 

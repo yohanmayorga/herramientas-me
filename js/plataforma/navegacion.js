@@ -48,11 +48,25 @@ function viewProximamente(h){
 
 function navCollapsed(){ return Boolean(NAV.manual); }
 
+function navDrawer(open){
+  if(open) filterDrawer(false);
+  document.body.classList.toggle('side-open',open);
+  $('#btnMenu').setAttribute('aria-expanded',open?'true':'false');
+}
+
+function filterDrawer(open){
+  if(open) navDrawer(false);
+  document.body.classList.toggle('filters-open',open);
+  document.querySelectorAll('[data-fopen]').forEach(b=>b.setAttribute('aria-expanded',open?'true':'false'));
+}
+
 function navApply(){
-  const side=$('#side'), sideNews=$('#sideNews'), home=$('#home'), wrap=document.querySelector('.wrap'), h=HERRAMIENTAS.find(x=>x.id===NAV.ruta);
-  const enInicio=!h;
+  const side=$('#side'), sideNews=$('#sideNews'), sideFilters=$('#sideFilters'), home=$('#home'), wrap=document.querySelector('.wrap'), h=HERRAMIENTAS.find(x=>x.id===NAV.ruta);
+  const enInicio=!h, enFiltros=NAV.ruta==='proyectos'||NAV.ruta==='tableros';
   document.body.classList.toggle('side-mini',navCollapsed());
   document.body.classList.toggle('en-inicio',enInicio);
+  document.body.classList.toggle('con-filtros',enFiltros);
+  filterDrawer(false);
   side.innerHTML=navSide();
   $('#sideTog').onclick=()=>{ NAV.manual=!navCollapsed(); navApply(); };
   side.querySelectorAll('.side-gh').forEach(b=>b.onclick=()=>{
@@ -64,6 +78,10 @@ function navApply(){
   if(sideNews){
     sideNews.hidden=!enInicio;
     if(enInicio) sideNews.innerHTML=viewSideNews();
+  }
+  if(sideFilters){
+    sideFilters.hidden=!enFiltros;
+    if(!enFiltros) sideFilters.innerHTML='';
   }
   const enDep=NAV.ruta==='depurador-ims';
   $('#btnGuide').hidden=!enDep;
@@ -84,16 +102,21 @@ function navRoute(){
     history.replaceState(null,'','#/depurador-ims');
   }
   NAV.ruta=ruta;
+  navDrawer(false);
   navApply();
 }
-
-function navDrawer(open){ document.body.classList.toggle('side-open',open); $('#btnMenu').setAttribute('aria-expanded',open?'true':'false'); }
 
 function navInit(){
   $('#btnMenu').innerHTML=icono('menu');
   $('#btnMenu').onclick=()=>navDrawer(!document.body.classList.contains('side-open'));
   $('#sideScrim').onclick=()=>navDrawer(false);
-  document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&document.body.classList.contains('side-open')) navDrawer(false); });
+  const fScrim=$('#filterScrim'); if(fScrim) fScrim.onclick=()=>filterDrawer(false);
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){
+      if(document.body.classList.contains('side-open')) navDrawer(false);
+      if(document.body.classList.contains('filters-open')) filterDrawer(false);
+    }
+  });
   const top=document.querySelector('header.top'), setH=()=>document.documentElement.style.setProperty('--toph',top.offsetHeight+'px');
   setH(); if(window.ResizeObserver) new ResizeObserver(setH).observe(top);
   window.addEventListener('hashchange',navRoute);

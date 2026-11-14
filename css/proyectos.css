@@ -5,22 +5,25 @@
 
 .portal.pj{max-width:1320px;padding:28px 24px 56px}
 .pj-hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.pj-hero-side{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .pj-today{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:5px 12px;white-space:nowrap}
+.pj-fbtn{display:none;align-items:center;gap:7px;padding:6px 13px;font-size:13.5px;font-weight:600;border-color:var(--accent);color:var(--accent);background:var(--accent-soft);border-radius:999px}
+.pj-fbtn:hover{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.pj-fbtn:hover .fcount{background:var(--surface);color:var(--accent)}
 
-/* Filtros */
-.pj-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px 18px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:18px;position:sticky;top:calc(var(--toph) + 8px);z-index:3;box-shadow:0 4px 14px rgba(20,34,61,.06)}
-.pj-search{flex:1 1 220px;position:relative;display:flex;align-items:center}
+/* Filtros (lateral derecho en web, panel deslizable en pantallas pequeñas y teléfonos) */
+.pj-search{width:100%;flex:none;position:relative;display:flex;align-items:center}
 .pj-search svg{position:absolute;left:11px;color:var(--ink-2);pointer-events:none}
-.pj-search input{width:100%;padding:9px 12px 9px 38px}
-.pj-fg{display:flex;flex-direction:column;gap:5px}
-.pj-fl{font-size:12px;font-weight:600;color:var(--ink-2);text-transform:uppercase;letter-spacing:.05em}
-.pj-fg select{padding:8px 10px;min-width:170px}
-.pj-seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
-.pj-seg button{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;background:none;padding:8px 13px;cursor:pointer;font-size:14px;font-weight:500;color:var(--ink-2);border-left:1px solid var(--line)}
+.pj-search input{width:100%;padding:8px 12px 8px 36px;font-size:13.5px}
+.pj-fg{display:flex;flex-direction:column;gap:5px;width:100%}
+.pj-fl{font-size:11.5px;font-weight:600;color:var(--ink-2);text-transform:uppercase;letter-spacing:.05em}
+.pj-fg select{padding:7px 10px;width:100%;min-width:0;font-size:13.5px}
+.pj-seg{display:flex;width:100%;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.pj-seg button{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;border:0;background:none;padding:7px 6px;cursor:pointer;font-size:13px;font-weight:500;color:var(--ink-2);border-left:1px solid var(--line);min-width:0}
 .pj-seg button:first-child{border-left:0}
 .pj-seg button:hover{background:var(--surface-2);color:var(--ink)}
 .pj-seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
-.pj-clear{align-self:flex-end;margin-bottom:2px}
+.pj-clear{justify-content:center}
 
 /* Resumen */
 .pj-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:18px}
@@ -101,12 +104,17 @@
 .pj-tlinks .pj-link{padding:5px 7px;font-size:12px;gap:4px;white-space:nowrap}
 .pj-tlinks .pj-link svg{width:14px;height:14px}
 
+@media (max-width:1160px), (max-height:560px) and (orientation:landscape){
+  .pj-fbtn{display:inline-flex}
+}
 @media (max-width:1100px){ .pj-kpis{grid-template-columns:repeat(3,minmax(0,1fr))} }
-@media (max-width:900px){ .pj-filters{position:static} .pj-kpis{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (max-width:900px){ .pj-kpis{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (max-height:560px) and (orientation:landscape){
+  .pj-kpis{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:14px}
+  .pj-kpi{padding:10px 12px}
+  .pj-kpi b{font-size:20px}
+}
 @media (max-width:640px){
-  .pj-filters{padding:14px}
-  .pj-fg,.pj-fg select,.pj-seg{width:100%}
-  .pj-seg button{flex:1}
   .pj-grid{grid-template-columns:minmax(0,1fr)}
   .pj-kpi b{font-size:22px}
   .pj-hero{align-items:flex-start}
