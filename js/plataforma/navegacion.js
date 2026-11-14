@@ -5,8 +5,8 @@ const NAV={ ruta:'inicio', manual:null };
 function navSide(){
   const item=(id,nombre,ic,extra='')=>`<a class="side-i${NAV.ruta===id?' on':''}" href="#/${id}" data-tip="${esc(nombre)}"${NAV.ruta===id?' aria-current="page"':''}>${icono(ic)}<span class="side-t">${esc(nombre)}</span>${extra}</a>`;
   return `<div class="side-sec">${item('inicio','Inicio','inicio')}</div>
-    <div class="side-sec"><div class="side-h">Herramientas</div>
-      ${HERRAMIENTAS.map(h=>item(h.id,h.nombre,h.icono,h.estado==='disponible'?'':'<span class="side-b">Pronto</span>')).join('')}</div>
+    ${[...new Set(HERRAMIENTAS.map(h=>h.grupo))].map(g=>`<div class="side-sec"><div class="side-h">${esc(g)}</div>
+      ${HERRAMIENTAS.filter(h=>h.grupo===g).map(h=>item(h.id,h.nombre,h.icono,h.estado==='disponible'?'':'<span class="side-b">Pronto</span>')).join('')}</div>`).join('')}
     <button class="side-i side-tog" type="button" id="sideTog" aria-label="${navCollapsed()?'Expandir menú':'Contraer menú'}" title="${navCollapsed()?'Expandir menú':'Contraer menú'}">${icono(navCollapsed()?'expandir':'contraer')}<span class="side-t">Contraer menú</span></button>`;
 }
 
@@ -18,7 +18,7 @@ function viewPortada(){
       <h1>Herramientas de Monitoreo y Evaluación</h1>
       <p>Un solo lugar para las herramientas del área de M&amp;E de la OIM Venezuela: depuración de datos, tableros y conexiones a las fuentes de información.</p>
     </section>
-    <h2 class="p-title">Herramientas</h2>
+    <h2 class="p-title">Secciones y herramientas</h2>
     <div class="p-grid">${HERRAMIENTAS.map(h=>`<article class="p-card${h.estado==='disponible'?'':' dev'}">
       <div class="p-ch"><span class="p-ic">${icono(h.icono,24)}</span>${estadoChip(h.estado)}</div>
       <h3>${esc(h.nombre)}</h3><p class="muted">${esc(h.resumen)}</p>
@@ -59,7 +59,8 @@ function navApply(){
   wrap.hidden=!enDep; home.hidden=enDep;
   document.title=h?`${h.nombre} · Herramientas M&E`:'Herramientas M&E';
   if(enDep){ render(); return; }
-  home.innerHTML=h?viewProximamente(h):viewPortada();
+  home.innerHTML=!h?viewPortada():h.vista?h.vista():viewProximamente(h);
+  if(h&&h.enlazar) h.enlazar();
   window.scrollTo(0,0);
 }
 
