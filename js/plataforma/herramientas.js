@@ -35,11 +35,3 @@ const HERRAMIENTAS=[
     resumen:'Directorio de conexiones a fuentes de datos (por ejemplo, KoboToolbox) para Power BI y Power Query.',
     puntos:['Enlaces de exportación por formulario y proyecto','Instrucciones de conexión desde Power BI','Sin credenciales: los tokens nunca se guardan en la herramienta'] }
 ];
-
-/* Novedades: la más reciente primero */
-const NOVEDADES=[
-  ['Noviembre 2026','Nueva sección Proyectos: plazo, presupuesto, avance y enlaces de cada proyecto, con filtros.'],
-  ['Noviembre 2026','Nueva portada de Herramientas M&E con menú lateral para reunir todas las herramientas del área.'],
-  ['Noviembre 2026','Depurador IMS: limpieza avanzada del Registro de Familias, con duplicados entre familias, nivel de severidad y filas alineadas con el archivo del IMS.'],
-  ['Noviembre 2026','Depurador IMS: mapa de Venezuela en los informes y el tablero, y exportación del SITREP.']
-];
