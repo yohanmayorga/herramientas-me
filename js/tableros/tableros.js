@@ -38,19 +38,20 @@ function tbFiltrados(){
 
 function tbCard(t){
   const ec=tbEstadoClase(t.estado), done=ec==='off';
-  const esGen=t.alcance==='General';
+  const esGen=t.alcance==='General', sinProy=tbNorm(t.proyecto)==='no aplica';
+  const pTxt=sinProy?'No Aplica':`Proyecto ${t.proyecto} ${t.tipo.toLowerCase()}`;
   return `<article class="pj-card t-${t.tipo==='Emergencia'?'em':'re'}${done?' done':''}">
     <div class="pj-top">
       <span class="pj-tipo">${esc(t.proyecto)} · ${esc(t.tipo)}</span>
       <span class="pj-st ${ec}">${esc(t.estado)}</span>
     </div>
     <h3>${esc(t.nombre)}</h3>
-    <div class="tb-sub">${tbIco(esGen?'general':'socio',14)}<span>${esc(esGen?'Consolidado general del proyecto':`Socio: ${t.socio||t.nombre}`)}</span></div>
+    <div class="tb-sub">${tbIco(esGen?'general':'socio',14)}<span>${esc(esGen?(sinProy?'Consolidado general':'Consolidado general del proyecto'):`Socio: ${t.socio||t.nombre}`)}</span></div>
     <p class="tb-desc">${esc(t.descripcion)}</p>
     <div class="tb-meta">
       <div class="tb-mitem">
         <span>${tbIco('proyecto',13)} Proyecto</span>
-        <b title="Proyecto ${esc(t.proyecto)} ${esc(t.tipo.toLowerCase())}">Proyecto ${esc(t.proyecto)} ${esc(t.tipo.toLowerCase())}</b>
+        <b title="${esc(pTxt)}">${esc(pTxt)}</b>
       </div>
       <div class="tb-mitem">
         <span>${tbIco('reloj',13)} Actualizaciones</span>
@@ -96,14 +97,14 @@ function tbTabla(L){
 function tbResumen(L){
   const act=L.filter(t=>tbNorm(t.estado)==='activo');
   const gen=L.filter(t=>t.alcance==='General').length, soc=L.filter(t=>t.alcance!=='General').length;
-  const proys=[...new Set(L.map(t=>t.proyecto))];
+  const proys=[...new Set(L.map(t=>t.proyecto).filter(p=>tbNorm(p)!=='no aplica'))];
   const em=L.filter(t=>t.tipo==='Emergencia').length, re=L.filter(t=>t.tipo==='Regular').length;
   const freqs=[...new Set(L.map(t=>t.actualizacion))];
   const pl=(k,a,b)=>`${k} ${k===1?a:b}`;
   return `<div class="pj-kpis">
     <div class="pj-kpi main"><span>Tableros</span><b>${L.length}</b><small>${gen} general · ${pl(soc,'socio','socios')}</small></div>
     <div class="pj-kpi"><span>Activos</span><b>${act.length}</b><small>${re} regular · ${em} emergencia</small></div>
-    <div class="pj-kpi"><span>Proyectos</span><b>${proys.length}</b><small>${proys.length?esc(proys.join(', ')):'—'}</small></div>
+    <div class="pj-kpi"><span>Proyectos</span><b>${proys.length}</b><small>${proys.length?esc(proys.join(', ')):(L.length?'No Aplica':'—')}</small></div>
     <div class="pj-kpi"><span>Por socio</span><b>${soc}</b><small>${pl(gen,'tablero general','tableros generales')}</small></div>
     <div class="pj-kpi"><span>Actualización</span><b>${freqs.length===1?esc(freqs[0]):pl(freqs.length,'frecuencia','frecuencias')}</b><small>${pl(act.length,'tablero activo','tableros activos')}</small></div>
   </div>`;

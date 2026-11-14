@@ -88,5 +88,60 @@ const TABLEROS=[
     actualizacion:'Cada 4 horas',
     descripcion:'Proyecto ECHO regular · seguimiento de ODISEF. Tablero activo con actualizaciones cada 4 horas.',
     url:'https://app.powerbi.com/view?r=eyJrIjoiZGQ4YmI3ODAtZGIzNS00MmU4LWE1NGItYzBiOGFmMzVhOGMwIiwidCI6IjE1ODgyNjJkLTIzZmItNDNiNC1iZDZlLWJjZTQ5YzhlNjE4NiIsImMiOjh9'
+  },
+  {
+    nombre:'Seguimiento de la emergencia',
+    proyecto:'DHR',
+    tipo:'Emergencia',
+    alcance:'General',
+    socio:'Consolidado general',
+    estado:'Activo',
+    actualizacion:'Diaria',
+    descripcion:'Proyecto DHR emergencia (consolidado general). Tablero activo con actualización diaria.',
+    url:'https://app.powerbi.com/view?r=eyJrIjoiNDBkYTRlZjEtMTg5NS00MjZjLTk5YjMtOGY2ZjRlMzg3NWZjIiwidCI6IjE1ODgyNjJkLTIzZmItNDNiNC1iZDZlLWJjZTQ5YzhlNjE4NiIsImMiOjh9'
+  },
+  {
+    nombre:'Gran Misión Vuelta a la Patria',
+    proyecto:'No Aplica',
+    tipo:'Regular',
+    alcance:'General',
+    socio:'Consolidado general',
+    estado:'Activo',
+    actualizacion:'Eventual',
+    descripcion:'Tablero general regular de la Gran Misión Vuelta a la Patria. Tablero activo con actualización eventual.',
+    url:'https://app.powerbi.com/view?r=eyJrIjoiN2Q4ZWZjOGQtNWUzOC00OWU2LTkxYWItYjdlNzVhYThmMzgxIiwidCI6IjE1ODgyNjJkLTIzZmItNDNiNC1iZDZlLWJjZTQ5YzhlNjE4NiIsImMiOjh9'
+  },
+  {
+    nombre:'Retorno Voluntario Asistido y Reintegración',
+    proyecto:'AVR',
+    tipo:'Regular',
+    alcance:'General',
+    socio:'Consolidado general',
+    estado:'Activo',
+    actualizacion:'Semanal',
+    descripcion:'Proyecto AVR regular (consolidado general). Tablero activo con actualización semanal.',
+    url:'https://app.powerbi.com/view?r=eyJrIjoiNzg2OGJjMjYtMTFmZi00NmMwLWFkZjktZWJmYmI0YjE0OTk3IiwidCI6IjE1ODgyNjJkLTIzZmItNDNiNC1iZDZlLWJjZTQ5YzhlNjE4NiIsImMiOjh9'
+  },
+  {
+    nombre:'Encuesta de satisfacción a beneficiarios',
+    proyecto:'No Aplica',
+    tipo:'Emergencia',
+    alcance:'General',
+    socio:'Consolidado general',
+    estado:'Activo',
+    actualizacion:'Diaria',
+    descripcion:'Tablero general de emergencia de la encuesta de satisfacción a beneficiarios. Tablero activo con actualización diaria.',
+    url:'https://app.powerbi.com/view?r=eyJrIjoiMWM5MjlmY2MtNGY4Yy00ODFhLTgyODQtNzY3OTg4MDE1NzcxIiwidCI6IjE1ODgyNjJkLTIzZmItNDNiNC1iZDZlLWJjZTQ5YzhlNjE4NiIsImMiOjh9'
+  },
+  {
+    nombre:'JAPÓN - General',
+    proyecto:'JAPÓN',
+    tipo:'Regular',
+    alcance:'General',
+    socio:'Consolidado general',
+    estado:'Activo',
+    actualizacion:'Diaria',
+    descripcion:'Proyecto JAPÓN regular (consolidado general). Tablero activo con actualización diaria.',
+    url:'https://app.powerbi.com/view?r=eyJrIjoiNzdlNmY3YTctM2FhMy00ZjZiLTk5MGYtMzBmM2E1ZDgwNTQwIiwidCI6IjE1ODgyNjJkLTIzZmItNDNiNC1iZDZlLWJjZTQ5YzhlNjE4NiIsImMiOjh9'
   }
 ];
