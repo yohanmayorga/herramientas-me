@@ -18,3 +18,5 @@ button.pj-link{font-family:inherit;cursor:pointer}
 .tb-tfreq svg{color:var(--accent);flex:none}
 .tb-alc{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);white-space:nowrap}
 .tb-alc.gen{background:var(--accent-soft);color:var(--accent)}
+.fm-url{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;color:var(--accent);text-decoration:none;word-break:break-all}
+.fm-url:hover{text-decoration:underline}

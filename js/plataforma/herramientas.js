@@ -8,6 +8,7 @@ const ICONOS={
   inicio:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/>',
   depurador:'<path d="M4 4h16l-6 8v6l-4 2v-8z"/>',
   tableros:'<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  formularios:'<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/>',
   apis:'<path d="M9 7V3M15 7V3"/><path d="M6 7h12v4a6 6 0 0 1-12 0z"/><path d="M12 17v4"/>',
   menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
   contraer:'<path d="M15 6l-6 6 6 6"/>',
@@ -33,6 +34,10 @@ const HERRAMIENTAS=[
     resumen:'Valida y limpia las descargas del IMS y genera reportes, Power BI, informes PDF, tablero y SITREP.',
     puntos:['Registro de Familias, atenciones, actividades comunitarias y kits','Reporte de errores y limpieza avanzada del Registro','Excel para Power BI, informe PDF, tablero interactivo y SITREP'],
     accesos:[['Archivo único','#/depurador-ims/unico'],['Depurador múltiple','#/depurador-ims/multiple'],['Guía de uso','#/depurador-ims/guia']] },
+  { id:'formularios', nombre:'Repositorio de formularios', icono:'formularios', estado:'disponible', grupo:'Herramientas',
+    resumen:'Catálogo de los formularios de KoboToolbox utilizados para el levantamiento de información en los proyectos y áreas de la organización.',
+    puntos:['Filtros por proyecto, área temática y tipo (regular o emergencia)','Búsqueda rápida por nombre de formulario, proyecto o área','Acceso directo al formulario en KoboToolbox y copia rápida de enlace'],
+    vista:viewFormularios, enlazar:bindFormularios },
   { id:'apis', nombre:'Enlaces de API', icono:'apis', estado:'desarrollo', grupo:'Herramientas',
     resumen:'Directorio de conexiones a fuentes de datos (por ejemplo, KoboToolbox) para Power BI y Power Query.',
     puntos:['Enlaces de exportación por formulario y proyecto','Instrucciones de conexión desde Power BI','Sin credenciales: los tokens nunca se guardan en la herramienta'] }

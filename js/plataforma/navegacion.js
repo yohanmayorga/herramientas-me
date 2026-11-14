@@ -62,7 +62,7 @@ function filterDrawer(open){
 
 function navApply(){
   const side=$('#side'), sideNews=$('#sideNews'), sideFilters=$('#sideFilters'), home=$('#home'), wrap=document.querySelector('.wrap'), h=HERRAMIENTAS.find(x=>x.id===NAV.ruta);
-  const enInicio=!h, enFiltros=NAV.ruta==='proyectos'||NAV.ruta==='tableros';
+  const enInicio=!h, enFiltros=NAV.ruta==='proyectos'||NAV.ruta==='tableros'||NAV.ruta==='formularios';
   document.body.classList.toggle('side-mini',navCollapsed());
   document.body.classList.toggle('en-inicio',enInicio);
   document.body.classList.toggle('con-filtros',enFiltros);
