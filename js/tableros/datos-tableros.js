@@ -129,7 +129,7 @@ const TABLEROS=[
     alcance:'General',
     socio:'Consolidado general',
     estado:'Activo',
-    actualizacion:'Diaria',
+    actualizacion:'Dos veces al día',
     descripcion:'Tablero general de emergencia de la encuesta de satisfacción a beneficiarios. Tablero activo con actualización diaria.',
     url:'https://app.powerbi.com/view?r=eyJrIjoiMWM5MjlmY2MtNGY4Yy00ODFhLTgyODQtNzY3OTg4MDE1NzcxIiwidCI6IjE1ODgyNjJkLTIzZmItNDNiNC1iZDZlLWJjZTQ5YzhlNjE4NiIsImMiOjh9'
   },
