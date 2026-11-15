@@ -140,7 +140,7 @@ const TABLEROS=[
     alcance:'General',
     socio:'Consolidado general',
     estado:'Activo',
-    actualizacion:'Diaria',
+    actualizacion:'Tres veces al día',
     descripcion:'Proyecto JAPÓN regular (consolidado general). Tablero activo con actualización diaria.',
     url:'https://app.powerbi.com/view?r=eyJrIjoiNzdlNmY3YTctM2FhMy00ZjZiLTk5MGYtMzBmM2E1ZDgwNTQwIiwidCI6IjE1ODgyNjJkLTIzZmItNDNiNC1iZDZlLWJjZTQ5YzhlNjE4NiIsImMiOjh9'
   }
