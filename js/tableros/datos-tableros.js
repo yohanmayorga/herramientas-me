@@ -96,7 +96,7 @@ const TABLEROS=[
     alcance:'General',
     socio:'Consolidado general',
     estado:'Activo',
-    actualizacion:'Diaria',
+    actualizacion:'Tres veces al día',
     descripcion:'Proyecto DHR emergencia (consolidado general). Tablero activo con actualización diaria.',
     url:'https://app.powerbi.com/view?r=eyJrIjoiNDBkYTRlZjEtMTg5NS00MjZjLTk5YjMtOGY2ZjRlMzg3NWZjIiwidCI6IjE1ODgyNjJkLTIzZmItNDNiNC1iZDZlLWJjZTQ5YzhlNjE4NiIsImMiOjh9'
   },
