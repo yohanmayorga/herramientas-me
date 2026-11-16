@@ -1,10 +1,11 @@
 /* Herramientas M&E · Sección Repositorio de tableros: filtros, resumen, tarjetas y lista */
-const TBL={ q:'', proyecto:'', tipo:'', alcance:'', estado:'', actualizacion:'', vista:'lista', vistaManual:false };
+const TBL={ q:'', proyecto:'', tipo:'', alcance:'', estado:'', actualizacion:'', frecuencia:'', vista:'lista', vistaManual:false };
 
 const TBL_ICON={
   ext:'<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
   buscar:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   reloj:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  sync:'<path d="M21 12a9 9 0 0 0-15.5-6.36L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 15.5 6.36L21 16"/><path d="M16 16h5v5"/>',
   socio:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
   general:'<circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>',
   proyecto:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/>',
@@ -26,12 +27,13 @@ function tbEstadoClase(est){
 function tbFiltrados(){
   const q=tbNorm(TBL.q.trim());
   return TABLEROS.map((t,idx)=>({...t,_idx:idx})).filter(t=>{
-    if(q&&!tbNorm(`${t.nombre} ${t.proyecto} ${t.tipo} ${t.socio||''} ${t.alcance||''} ${t.descripcion||''} ${t.actualizacion||''} ${t.estado||''}`).includes(q)) return false;
+    if(q&&!tbNorm(`${t.nombre} ${t.proyecto} ${t.tipo} ${t.socio||''} ${t.alcance||''} ${t.descripcion||''} ${t.actualizacion||''} ${t.frecuencia||''} ${t.estado||''}`).includes(q)) return false;
     if(TBL.proyecto&&t.proyecto!==TBL.proyecto) return false;
     if(TBL.tipo&&t.tipo!==TBL.tipo) return false;
     if(TBL.alcance&&t.alcance!==TBL.alcance) return false;
     if(TBL.estado&&t.estado!==TBL.estado) return false;
     if(TBL.actualizacion&&t.actualizacion!==TBL.actualizacion) return false;
+    if(TBL.frecuencia&&t.frecuencia!==TBL.frecuencia) return false;
     return true;
   });
 }
@@ -39,7 +41,6 @@ function tbFiltrados(){
 function tbCard(t){
   const ec=tbEstadoClase(t.estado), done=ec==='off';
   const esGen=t.alcance==='General', sinProy=tbNorm(t.proyecto)==='no aplica';
-  const pTxt=sinProy?'No Aplica':`Proyecto ${t.proyecto} ${t.tipo.toLowerCase()}`;
   return `<article class="pj-card t-${t.tipo==='Emergencia'?'em':'re'}${done?' done':''}">
     <div class="pj-top">
       <span class="pj-tipo">${esc(t.proyecto)} · ${esc(t.tipo)}</span>
@@ -50,12 +51,12 @@ function tbCard(t){
     <p class="tb-desc">${esc(t.descripcion)}</p>
     <div class="tb-meta">
       <div class="tb-mitem">
-        <span>${tbIco('proyecto',13)} Proyecto</span>
-        <b title="${esc(pTxt)}">${esc(pTxt)}</b>
+        <span>${tbIco('sync',13)} Actualización</span>
+        <b title="${esc(t.actualizacion)}">${esc(t.actualizacion)}</b>
       </div>
       <div class="tb-mitem">
-        <span>${tbIco('reloj',13)} Actualizaciones</span>
-        <b title="${esc(t.actualizacion)}">${esc(t.actualizacion)}</b>
+        <span>${tbIco('reloj',13)} Frecuencia</span>
+        <b title="${esc(t.frecuencia)}">${esc(t.frecuencia)}</b>
       </div>
     </div>
     <div class="tb-actions">
@@ -73,6 +74,7 @@ function tbTabla(L){
       <th>Alcance / Socio</th>
       <th>Estado</th>
       <th>Actualización</th>
+      <th>Frecuencia</th>
       <th>Acciones</th>
     </tr></thead>
     <tbody>${L.map(t=>{
@@ -82,7 +84,8 @@ function tbTabla(L){
         <td><span class="pj-tipo">${esc(t.proyecto)} · ${esc(t.tipo)}</span></td>
         <td><span class="tb-alc${esGen?' gen':''}">${esc(esGen?'General':t.socio||'Socio')}</span></td>
         <td><span class="pj-st ${ec}">${esc(t.estado)}</span></td>
-        <td><span class="tb-tfreq">${tbIco('reloj',14)}${esc(t.actualizacion)}</span></td>
+        <td><span class="tb-tact">${esc(t.actualizacion)}</span></td>
+        <td><span class="tb-tfreq">${tbIco('reloj',14)}${esc(t.frecuencia)}</span></td>
         <td>
           <div class="pj-tlinks">
             <a class="pj-link primary" href="${esc(t.url)}" target="_blank" rel="noopener noreferrer" title="Abrir tablero en una pestaña nueva">${tbIco('ext',14)}<span>Abrir</span></a>
@@ -95,7 +98,7 @@ function tbTabla(L){
 }
 
 function tbActiveCount(){
-  return [TBL.q.trim(),TBL.proyecto,TBL.tipo,TBL.alcance,TBL.estado,TBL.actualizacion].filter(Boolean).length;
+  return [TBL.q.trim(),TBL.proyecto,TBL.tipo,TBL.alcance,TBL.estado,TBL.actualizacion,TBL.frecuencia].filter(Boolean).length;
 }
 
 function viewTablerosFiltros(){
@@ -104,6 +107,7 @@ function viewTablerosFiltros(){
   const proys=[...new Set(TABLEROS.map(t=>t.proyecto))];
   const estados=[...new Set(['Activo','Finalizado',...TABLEROS.map(t=>t.estado)])];
   const acts=[...new Set(TABLEROS.map(t=>t.actualizacion))];
+  const freqs=[...new Set(TABLEROS.map(t=>t.frecuencia))];
   const n=tbActiveCount();
   return `<div class="sf-wrap pj tb" role="search">
     <div class="side-h sf-head"><span>Filtros</span><button class="btn sm sf-close" type="button" data-fclose aria-label="Cerrar filtros">✕</button></div>
@@ -114,6 +118,7 @@ function viewTablerosFiltros(){
       <div class="pj-fg"><span class="pj-fl">Alcance</span>${seg('alcance',[['','Todos'],['General','General'],['Socio','Por socio']])}</div>
       <label class="pj-fg"><span class="pj-fl">Estado</span><select class="in" id="tbEstado">${opt('','Todos',TBL.estado)}${estados.map(e=>opt(e,e,TBL.estado)).join('')}</select></label>
       <label class="pj-fg"><span class="pj-fl">Actualización</span><select class="in" id="tbAct">${opt('','Todas',TBL.actualizacion)}${acts.map(a=>opt(a,a,TBL.actualizacion)).join('')}</select></label>
+      <label class="pj-fg"><span class="pj-fl">Frecuencia</span><select class="in" id="tbFreq">${opt('','Todas',TBL.frecuencia)}${freqs.map(f=>opt(f,f,TBL.frecuencia)).join('')}</select></label>
       <div class="pj-fg"><span class="pj-fl">Vista</span>${seg('vista',[['lista','Lista','lista'],['tarjetas','Tarjetas','tarjetas']])}</div>
     </div>
     <div class="sf-foot">
@@ -200,8 +205,9 @@ function bindTableros(){
   $('#tbProyecto').onchange=e=>{ TBL.proyecto=e.target.value; tbPaint(); };
   $('#tbEstado').onchange=e=>{ TBL.estado=e.target.value; tbPaint(); };
   $('#tbAct').onchange=e=>{ TBL.actualizacion=e.target.value; tbPaint(); };
+  $('#tbFreq').onchange=e=>{ TBL.frecuencia=e.target.value; tbPaint(); };
   $('#tbClear').onclick=()=>{
-    Object.assign(TBL,{q:'',proyecto:'',tipo:'',alcance:'',estado:'',actualizacion:'',vistaManual:false});
+    Object.assign(TBL,{q:'',proyecto:'',tipo:'',alcance:'',estado:'',actualizacion:'',frecuencia:'',vistaManual:false});
     $('#home').innerHTML=viewTableros();
     bindTableros();
   };
