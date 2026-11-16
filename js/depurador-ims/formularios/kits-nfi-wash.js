@@ -87,7 +87,9 @@ function nfiLoad(wb,fileName,REG,forced){
     a.selNoQty=[]; a.sel.forEach(s=>s.list.forEach(t=>{ if(!a.items.some(it=>match(t,N.kits[it.ki].name))) a.selNoQty.push(`${s.label}: ${t}`); }));
     return a; });
   N.servPairs=[]; N.services.forEach((sv,j)=>{ const f=fold(sv.label); if(!/personas .*usaron/.test(f)) return; const w=f.split(' ').pop(); const u=N.services.findIndex(x=>/usos/.test(fold(x.label))&&fold(x.label).split(' ').pop()===w); if(u>=0) N.servPairs.push([u,j]); });
-  N.cat=N.kits.map(k=>cfg.defaultCat(k.name)); N.inc=N.kits.map(()=>true);
+  N.cat=N.kits.map(k=>cfg.defaultCat(`${k.name} ${k.label}`)); N.inc=N.kits.map(()=>true);
+  N.matProj=N.kits.map(k=>/echo/i.test(`${k.name} ${k.label}`)?'ECHO ALERT':'DHR Emergencia');
+  N.matProjOtro=N.kits.map(()=>'');
   N.socioList=countBy(N.rows,a=>a.socio||'(vacío)'); N.valid=new Set(N.socioList.map(([s])=>fold(s)));
   N.minValid=validFrom(N.rows.map(a=>a.fecha)); dateRange(N);
   N.filters={from:N.minDate,to:N.maxDate,cats:{},kcat:new Set(KIT_CATS)};
@@ -170,17 +172,137 @@ async function nfiExportErrors(){
   await saveFile(`${S.nfi.cfg.file}_Errores_${TODAY_YMD}.xlsx`,xlsxBlob(wb));
 }
 
+const MAT_PROJS=['ECHO ALERT','DHR Emergencia','Otro'];
+const MAT_BANDS=[
+  ['Niñas de 0 a 5 años','Niños de 0 a 5 años',0,5],
+  ['Niñas de 6 a 9 años','Niños de 6 a 9 años',6,9],
+  ['Niñas de 10 a 11 años','Niños de 10 a 11 años',10,11],
+  ['Niñas de 12 a 14 años','Niños de 12 a 14 años',12,14],
+  ['Niñas de 15 a 17 años','Niños de 15 a 17 años',15,17],
+  ['Mujeres de 18 a 19 años','Hombres de 18 a 19 años',18,19],
+  ['Mujeres de 20 a 49 años','Hombres de 20 a 49 años',20,49],
+  ['Mujeres de 50 a 59 años','Hombres de 50 a 59 años',50,59],
+  ['Mujeres de 60 años o más','Hombres de 60 años o más',60,150]
+];
+const isIndig=p=>!!((p.indig&&!['no','ninguno','ninguna','no aplica','na','n a'].includes(fold(p.indig)))||(p.perfil&&[...p.perfil].some(y=>/indig/.test(fold(y)))));
+async function nfiExportMatriz(){
+  const N=S.nfi, F=N.filters, tag=F.from&&F.to?`_${F.from}_a_${F.to}`:'';
+  const rows=nfiRows(F).filter(a=>N.valid.has(fold(a.socio||'(vacío)'))).slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')||a.n-b.n);
+  if(!rows.length){ toast('No hay entregas válidas con los filtros y socios seleccionados.'); return; }
+  const seenBySec={NFI:new Set(),WASH:new Set()}, grpMap=new Map();
+  const getGrp=(fecha,proj,socio,estado,mun,parr,com,sector,rec)=>{
+    const k=[fecha,proj,socio,estado,mun,parr,com,sector,rec].join('|');
+    let g=grpMap.get(k);
+    if(!g){ g={fecha,proj,socio,estado,mun,parr,com,sector,rec,indig:0,disc:0,preg:0,ages:Array(18).fill(0),kits:0}; grpMap.set(k,g); }
+    return g;
+  };
+  const pKey=p=>p.pid?`id:${p.pid}`:`f:${p.fam}|${p.n}`;
+  rows.forEach(a=>{
+    const slices=new Map();
+    nfiItems(a,F).forEach(it=>{
+      const sec=N.cat[it.ki]==='WASH'?'WASH':'NFI';
+      const mp=N.matProj&&N.matProj[it.ki]?N.matProj[it.ki]:'DHR Emergencia';
+      const proj=mp==='Otro'?((N.matProjOtro&&N.matProjOtro[it.ki]||'').trim()||'Otro'):mp;
+      const sk=`${proj}|${sec}`;
+      slices.set(sk,{proj,sec,q:(slices.get(sk)?.q||0)+it.q});
+    });
+    slices.forEach(({proj,sec,q})=>{
+      const seen=seenBySec[sec], psNo=[], psSi=[];
+      (a.ps||[]).forEach(p=>{ const pk=pKey(p); if(seen.has(pk)) psSi.push(p); else{ seen.add(pk); psNo.push(p); } });
+      const addBucket=(rec,ps,kitsQ)=>{
+        const g=getGrp(a.fecha||'',proj,a.socio||'',a.estado||'',a.municipio||'',a.parroquia||'',a.comunidad||'',sec,rec);
+        g.kits+=kitsQ;
+        ps.forEach(p=>{
+          if(isIndig(p)) g.indig++;
+          if(fold(p.disc)==='si') g.disc++;
+          if(isPreg(p)) g.preg++;
+          const age=p.birth&&a.fecha&&p.birth<=a.fecha?ageAt(p.birth,a.fecha):p.age;
+          const sx=fold(p.sexo);
+          if(age!=null&&(sx==='mujer'||sx==='hombre')){
+            const bi=MAT_BANDS.findIndex(([,,lo,hi])=>age>=lo&&age<=hi);
+            if(bi>=0) g.ages[bi*2+(sx==='mujer'?0:1)]++;
+          }
+        });
+      };
+      if(psNo.length){
+        addBucket('NO',psNo,q);
+        if(psSi.length) addBucket('SI',psSi,0);
+      } else if(psSi.length){
+        addBucket('SI',psSi,q);
+      } else {
+        addBucket('NO',[],q);
+      }
+    });
+  });
+  const outRows=[...grpMap.values()].sort((a,b)=>a.fecha.localeCompare(b.fecha)||a.proj.localeCompare(b.proj)||a.socio.localeCompare(b.socio)||a.estado.localeCompare(b.estado)||a.mun.localeCompare(b.mun)||a.parr.localeCompare(b.parr)||a.com.localeCompare(b.com)||a.sector.localeCompare(b.sector)||a.rec.localeCompare(b.rec));
+  const headers=[
+    'FECHA','PROYECTO','SOCIO','ESTADO','MUNICIPIO','PARROQUIA','COMUNIDAD','SECTOR',
+    'NOMBRE DE LA ACTIVIDAD','INDICADOR 345W','INDICADOR DE CONVENIO','INDICADOR DEL PROYECTO',
+    'Número de Población Indígena','Número de Personas con discapacidad','Número de Personas embarazadas o en lactancia',
+    'RECURRENTES','TOTAL RECURRENTES',
+    ...MAT_BANDS.flatMap(([f,m])=>[f,m]),
+    'TOTAL PERSONAS','TOTAL SERVICIOS','TOTAL KITS'
+  ];
+  const subRow=Array(headers.length).fill(''); subRow[15]='SI/NO';
+  const matDate=ymdStr=>{
+    if(!ymdStr||!/^\d{4}-\d{2}-\d{2}$/.test(ymdStr)) return null;
+    const [y,m,d]=ymdStr.split('-').map(Number);
+    return new Date(Date.UTC(y,m-1,d));
+  };
+  const fname=`Matriz_Monitoreo_NFI${tag}.xlsx`;
+  if(window.ExcelJS){
+    const wb=new ExcelJS.Workbook(), ws=wb.addWorksheet('Matriz de monitoreo',{views:[{state:'frozen',ySplit:2}]});
+    const thin={style:'thin',color:{argb:'FFCBD5E1'}}, box={top:thin,left:thin,bottom:thin,right:thin};
+    ws.columns=headers.map((h,i)=>({width:i===0?14:i<8?18:i<12?22:i<17?16:i<35?14:15}));
+    const r1=ws.getRow(1);
+    headers.forEach((h,i)=>{ const c=r1.getCell(i+1); c.value=h; c.font={bold:true,color:{argb:'FFFFFFFF'},size:10}; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0033A0'}}; c.alignment={horizontal:'center',vertical:'middle',wrapText:true}; c.border=box; });
+    r1.height=34;
+    const r2=ws.getRow(2);
+    subRow.forEach((v,i)=>{ const c=r2.getCell(i+1); c.value=v||null; c.font={bold:true,size:9,color:{argb:'FF475569'}}; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE2E8F0'}}; c.alignment={horizontal:'center'}; c.border=box; });
+    outRows.forEach((g,idx)=>{
+      const rIdx=3+idx, r=ws.getRow(rIdx), totPers=g.ages.reduce((s,v)=>s+v,0);
+      const vals=[
+        matDate(g.fecha),g.proj,g.socio,g.estado,g.mun,g.parr,g.com,g.sector,
+        null,null,null,null,
+        g.indig,g.disc,g.preg,g.rec,null,
+        ...g.ages,
+        {formula:`SUM(R${rIdx}:AI${rIdx})`,result:totPers},null,g.kits
+      ];
+      vals.forEach((v,ci)=>{
+        const c=r.getCell(ci+1); c.value=v; c.border=box;
+        if(ci===0){ c.numFmt='dd/mm/yyyy'; c.alignment={horizontal:'center'}; }
+        if(ci>=12&&ci!==15&&ci!==16&&ci!==36){ c.numFmt='#,##0'; }
+        if(ci===15) c.alignment={horizontal:'center'};
+      });
+    });
+    ws.autoFilter={from:{row:1,column:1},to:{row:Math.max(2,outRows.length+2),column:headers.length}};
+    const buf=await wb.xlsx.writeBuffer();
+    await saveFile(fname,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})); return;
+  }
+  const wb=XLSX.utils.book_new();
+  const aoa=[headers,subRow,...outRows.map(g=>[g.fecha||null,g.proj,g.socio,g.estado,g.mun,g.parr,g.com,g.sector,null,null,null,null,g.indig,g.disc,g.preg,g.rec,null,...g.ages,g.ages.reduce((s,v)=>s+v,0),null,g.kits])];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoa),'Matriz de monitoreo');
+  await saveFile(fname,xlsxBlob(wb));
+}
+
 /* --- Vistas --- */
 function kitRowsHtml(N){
-  const ord=c=>KIT_CATS.indexOf(c);
+  const isNfi=N.cfg.id==='nfi', ord=c=>KIT_CATS.indexOf(c);
   return N.kits.map((k,i)=>({k,i})).filter(x=>x.k.total>0).sort((a,b)=>ord(N.cat[a.i])-ord(N.cat[b.i])||b.k.total-a.k.total)
-    .map(({k,i},j,arr)=>`<tr${j&&N.cat[arr[j-1].i]!==N.cat[i]?' class="kitgroup"':''}><td class="kinc"><input type="checkbox" data-kinc="${i}" ${N.inc[i]?'checked':''} aria-label="Incluir ${esc(k.name)} en el informe"></td><td style="white-space:normal" class="${N.inc[i]?'':'muted'}">${esc(k.name)}</td><td class="num">${fmt(k.total)}</td><td>${esc(k.proj||'—')}</td><td>${kitSelect(i,N.cat[i])}</td></tr>`).join('');
+    .map(({k,i},j,arr)=>{
+      const projCell=isNfi
+        ? `<td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><select class="in" data-mproj="${i}" aria-label="Proyecto del kit">${MAT_PROJS.map(p=>`<option ${N.matProj[i]===p?'selected':''}>${p}</option>`).join('')}</select><input type="text" class="in" data-mproj-otro="${i}" value="${esc(N.matProjOtro[i]||'')}" placeholder="Escribir proyecto…" style="min-width:140px;${N.matProj[i]==='Otro'?'':'display:none'}"></div></td>`
+        : `<td>${esc(k.proj||'—')}</td>`;
+      return `<tr${j&&N.cat[arr[j-1].i]!==N.cat[i]?' class="kitgroup"':''}><td class="kinc"><input type="checkbox" data-kinc="${i}" ${N.inc[i]?'checked':''} aria-label="Incluir ${esc(k.name)} en el informe"></td><td style="white-space:normal" class="${N.inc[i]?'':'muted'}">${esc(k.name)}</td><td class="num">${fmt(k.total)}</td>${projCell}<td>${kitSelect(i,N.cat[i],isNfi)}</td></tr>`;
+    }).join('');
 }
 function bindKitSelects(N){
   document.querySelectorAll('[data-kinc]').forEach(b=>b.onchange=()=>{ const i=+b.dataset.kinc; N.inc[i]=b.checked; b.closest('tr').children[1].classList.toggle('muted',!b.checked); });
   document.querySelectorAll('[data-kit]').forEach(sel=>sel.onchange=()=>{ const i=+sel.dataset.kit; N.cat[i]=sel.value; $('#kitRows').innerHTML=kitRowsHtml(N); bindKitSelects(N); const ns=document.querySelector(`[data-kit="${i}"]`); if(ns){ ns.focus(); ns.closest('tr').scrollIntoView({block:'nearest'}); } });
+  document.querySelectorAll('[data-mproj]').forEach(sel=>sel.onchange=()=>{ const i=+sel.dataset.mproj; N.matProj[i]=sel.value; const inp=document.querySelector(`[data-mproj-otro="${i}"]`); if(inp){ inp.style.display=sel.value==='Otro'?'':'none'; if(sel.value==='Otro') inp.focus(); } });
+  document.querySelectorAll('[data-mproj-otro]').forEach(inp=>inp.oninput=()=>{ N.matProjOtro[+inp.dataset.mprojOtro]=inp.value; });
 }
-function kitSelect(i,v){ return `<select class="in kitcat kitcat-${v.toLowerCase()}" data-kit="${i}" aria-label="Categoría del kit">${KIT_CATS.map(c=>`<option ${c===v?'selected':''}>${c}</option>`).join('')}</select>`; }
+function kitSelect(i,v,nfiOnly=false){ const opts=nfiOnly?['NFI','WASH']:KIT_CATS; return `<select class="in kitcat kitcat-${v.toLowerCase()}" data-kit="${i}" aria-label="Tipo de kit">${opts.map(c=>`<option ${c===v?'selected':''}>${c}</option>`).join('')}</select>`; }
 async function nfiLoadRegistro(f){
   busy(true); await nextFrame();
   try{ const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
@@ -203,7 +325,7 @@ function nfiViewVerify(){
     <h2>Clasificación de los kits</h2>
     <div class="panel"><p class="muted" style="margin:0 0 10px;font-size:14px">Confirma la categoría de cada kit entregado. ${esc(N.cfg.catNote)} La clasificación se usa para separar NFI, WASH y Otro en la tabla para Power BI y en el informe.</p>
       <div class="row" style="margin:0 0 8px;gap:14px;justify-content:space-between"><div class="row" style="gap:14px"><span class="kitchip kitcat-nfi">NFI</span><span class="kitchip kitcat-wash">WASH</span><span class="kitchip kitcat-otro">Otro</span></div><div class="row"><button class="btn sm" type="button" id="kincAll">Incluir todos</button><button class="btn sm" type="button" id="kincNone">Excluir todos</button></div></div><p class="muted" style="margin:0 0 8px;font-size:13px">Desmarca «Incluir» para dejar un kit fuera del informe PDF; se mantiene en la limpieza de datos y en la tabla para Power BI.</p>
-      <div class="scroll"><table class="kits"><thead><tr><th>Incluir</th><th>Kit</th><th class="num">Cantidad entregada</th><th>Proyecto según el nombre</th><th>Categoría</th></tr></thead><tbody id="kitRows">${kitRowsHtml(N)}</tbody></table></div>
+      <div class="scroll"><table class="kits"><thead><tr><th>Incluir</th><th>Kit</th><th class="num">Cantidad entregada</th><th>${N.cfg.id==='nfi'?'Proyecto':'Proyecto según el nombre'}</th><th>${N.cfg.id==='nfi'?'Tipo':'Categoría'}</th></tr></thead><tbody id="kitRows">${kitRowsHtml(N)}</tbody></table></div>
       ${N.kits.length>kits.length?`<p class="muted" style="font-size:13px;margin:8px 0 0">Se omiten ${N.kits.length-kits.length} tipos de kit sin entregas en este archivo.</p>`:''}</div>
     ${N.services.length?`<h2>Servicios registrados (no son kits)</h2><div class="scroll"><table><thead><tr><th>Servicio</th><th class="num">Total</th></tr></thead><tbody>${N.services.map(sv=>`<tr><td style="white-space:normal">${esc(sv.label)}</td><td class="num">${fmt(sv.total)}</td></tr>`).join('')}</tbody></table></div>`:''}
     <h2>Socios implementadores válidos</h2><div class="panel">
@@ -245,6 +367,7 @@ function nfiViewExport(){
   <div class="exports">
     <div class="exp"><h3>Limpieza de datos</h3><p>Un Excel con el resumen y el detalle de incidencias: duplicados, socios no válidos, familias que no están en el Registro, fechas, entregas sin kits, cantidades no válidas, kits seleccionados sin cantidad, kits sin proyecto y entregas sin ubicación. No modifica el archivo original.</p><button class="btn primary" type="button" id="exErr">Descargar reporte</button></div>
     <div class="exp"><h3>Tabla para Power BI</h3><p>Un Excel con tres tablas relacionadas por el Código de la entrega: <b>Entregas</b> (una fila por entrega, con totales por categoría), <b>Kits entregados</b> (una fila por kit, con categoría NFI/WASH/Otro, proyecto y cantidad) y <b>Beneficiarios</b> (una fila por integrante de la familia, con sexo, edad, parentesco, discapacidad y embarazo o lactancia).</p><button class="btn primary" type="button" id="exPbi" ${T.rows.length?'':'disabled'}>Descargar Excel</button></div>
+    ${N.cfg.id==='nfi'?`<div class="exp"><h3>Matriz de monitoreo</h3><p>Un Excel con el formato de la Matriz de monitoreo: desagregado por proyecto, socio válido (omitiendo socios errados), comunidad/parroquia/municipio, sector (NFI o WASH), recurrentes (SI/NO), población indígena, discapacidad, embarazadas/lactantes, edad y sexo, y total de kits.</p><button class="btn primary" type="button" id="exMat" ${T.rows.length?'':'disabled'}>Descargar Excel</button></div>`:''}
     <div class="exp"><h3>Construir informe</h3><p>Un PDF con el análisis de las entregas: kits NFI y WASH por separado, kits por proyecto, familias y personas beneficiarias, perfil por sexo y edad, lugares, socios y calidad de los datos.</p><button class="btn primary" type="button" id="exRep">Construir informe</button></div>
     <div class="exp"><h3>Tablero interactivo</h3><p>Un tablero con filtros de periodo, estado, municipio, parroquia y socio: resultados por formulario, desagregación por edad y sexo, población clave, histórico, ubicaciones y socios. Se puede exportar en PDF con los filtros aplicados.</p><button class="btn primary" type="button" data-opendash>Abrir tablero</button></div>
   </div>
@@ -414,7 +537,7 @@ function nfiBind(){
   }
   if(S.step===4){
     const run=fn=>async()=>{ busy(true); await nextFrame(); try{ await fn(); }catch(e){ console.error(e); toast('Error al exportar: '+(e.message||e)); } busy(false); };
-    on('#exErr','click',run(nfiExportErrors)); on('#exPbi','click',run(nfiExportPbi));
+    on('#exErr','click',run(nfiExportErrors)); on('#exPbi','click',run(nfiExportPbi)); on('#exMat','click',run(nfiExportMatriz));
     on('#exRep','click',()=>{ N.view='report'; render(); });
     on('#back','click',()=>{ S.step=3; render(); }); on('#restart','click',restart);
   }

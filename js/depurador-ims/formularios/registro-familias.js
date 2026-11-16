@@ -76,6 +76,7 @@ function famLoad(wb,fileName){
   }
   if(D.fatal.length) return D;
   const C=D.sheets.cases, B=D.sheets.benef, g=(sh,x,k)=>sh.idx[k]>=0?x.r[sh.idx[k]]:null;
+  const indigIdx=B.labels.findIndex((l,i)=>/indig|etnia/.test(fold(l))||/indig|etnia/.test(fold(B.machine[i]||'')));
   D.fams=C.rows.map(x=>{ const code=toText(g(C,x,'code')); const m=code&&code.match(/(\d+)\s*$/);
     return {n:x.n,code,num:m?Number(m[1]):null,codeOk:!!code&&/^OIM-vcs-\d+$/i.test(code),
       created:cellYMD(g(C,x,'created'),4),org:toText(g(C,x,'org')),alojamiento:toText(g(C,x,'alojamiento')),comunidad:toText(g(C,x,'comunidad')),
@@ -90,7 +91,7 @@ function famLoad(wb,fileName){
     const age=birth?ageAt(birth,TODAY_YMD):null;
     return {n:x.n,fam:fn==null?null:fn,f:fam||null,pid:toText(g(B,x,'pid')),name,nk:nameKey(name),parentesco,rel:fold(parentesco),birth,
       age,ageReg:birth&&fam&&fam.created&&birth<=fam.created?ageAt(birth,fam.created):age,
-      sexo:toText(g(B,x,'sexo')),idRaw,id:cleanId(idRaw),nat:toText(g(B,x,'nat')),disc:toText(g(B,x,'disc')),perfil};
+      sexo:toText(g(B,x,'sexo')),idRaw,id:cleanId(idRaw),nat:toText(g(B,x,'nat')),disc:toText(g(B,x,'disc')),indig:indigIdx>=0?toText(x.r[indigIdx]):null,perfil};
   });
   D.byFam=new Map(); D.pers.forEach(p=>{ if(p.fam==null) return; if(!D.byFam.has(p.fam)) D.byFam.set(p.fam,[]); D.byFam.get(p.fam).push(p); });
   const ds=D.fams.map(f=>f.created).filter(Boolean).sort(); D.minDate=ds[0]||''; D.maxDate=ds[ds.length-1]||'';
