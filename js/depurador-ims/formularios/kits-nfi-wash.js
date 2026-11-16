@@ -9,6 +9,9 @@ const NFI_COLS={
   caso:{m:'case_code',l:'Código de caso',req:1}};
 const KIT_CATS=['NFI','WASH','Otro'];
 const kitDefaultCat=name=>/tobo|bidon|higiene|filtro/.test(fold(name))?'WASH':'NFI';
+const WASH_NO_KIT_RE=/^(n[uú]mero de|litros de)|\b(usos\s+(de\s+)?(ba[nñ]os|duchas|lavander[ií]a)|personas\s+del\s+grupo\s+que\s+usaron\s+el\s+servicio|litros\s+de\s+agua\s+potable|personas\s+que\s+accedieron\s+al\s+servicio)\b/i;
+const KIT_META_RE=/^(excel index|machine name|id|uuid|created date|created user|updated date|updated user|c[oó]digo|estado\b|municipio\b|parroquia\b|¿?est[aá] en un alojamiento|alojamiento|comunidad|fecha\b|socio\b|c[oó]digo de caso|beneficiario|tipo de atenci[oó]n|tipo de asistencia|proyecto|seleccione los kits|observaci|comentario|nota)/i;
+const KIT_WORD_RE=/\b(kit|kits|lampara|lamparas|tobo|tobos|bidon|bidones|filtro|filtros|higiene|colchoneta|colchonetas|mosquitero|mosquiteros|cobija|cobijas|sabana|sabanas|hamaca|hamacas|cocina|enseres|lona|lonas|carpa|carpas|dignidad|menstrual|abrigo|dormitorio|aseo|limpieza|panal|panales|toalla|toallas|jabon|pastilla|pastillas|cloro)\b/;
 const kitNameProject=name=>{ const f=` ${fold(name)} `; return / echo /.test(f)?'ECHO':/ dhr /.test(f)||/ us /.test(f)?'DHR':null; }; // «US» corresponde al proyecto DHR
 const KIT_STOP=new Set(['de','del','la','el','los','las','y','oim','echo','dhr','us','coopi']);
 const kitKey=s=>fold(s).split(' ').filter(w=>w&&!KIT_STOP.has(w)).join(' ');
@@ -20,7 +23,7 @@ const KIT_CFG={
     catNote:'Por defecto los tobos, bidones, kits de higiene y filtros de agua se clasifican como WASH y el resto como NFI.'},
   wash:{id:'wash',name:'Entrega de kits y servicios WASH',file:'Entregas_WASH',title:'Informe de entrega de kits y servicios WASH',sub:'Kits y servicios WASH · IMS',src:'entrega de kits y servicios WASH',
     sel:[{k:'selDhr',m:'kits_oim_dhr',l:'Seleccione los kits entregados OIM-DHR',proj:'DHR'},{k:'selEcho',m:'kits_oim_echo',l:'Seleccione los kits entregados OIM-ECHO',proj:'ECHO'},{k:'selCoopi',m:'kits_coopi_dhr',l:'Seleccione los kits entregados COOPI-DHR',proj:'DHR'}],
-    projCol:{m:'proyecto',l:'Proyecto'}, defaultCat:()=>'WASH', serviceRe:/^(n[uú]mero de|litros de)/i,
+    projCol:{m:'proyecto',l:'Proyecto'}, defaultCat:()=>'WASH', serviceRe:WASH_NO_KIT_RE,
     ignored:'«Tipo de asistencia», «Seleccione los kits entregados» y «Beneficiario»',
     catNote:'Por defecto todos los kits se clasifican como WASH.'}
 };
@@ -36,16 +39,27 @@ function kitsSheet(wb){
   return null;
 }
 function nfiDetect(wb){ return !!kitsSheet(wb); }
+function isKitCol(sh,x,usedIdx,lastMetaIdx){
+  if(!x.label||usedIdx.has(x.i)||WASH_NO_KIT_RE.test(x.label)||KIT_META_RE.test(x.label)) return false;
+  if(/^(cantidad|cant\.?)\b/i.test(x.label)) return true;
+  if(lastMetaIdx>=0&&x.i>lastMetaIdx){
+    if(KIT_WORD_RE.test(fold(x.label))) return true;
+    const vals=sh.rows.map(r=>r.r[x.i]).filter(v=>v!=null&&String(v).trim()!=='');
+    if(vals.length&&vals.every(v=>toNum(v)!==undefined)) return true;
+  }
+  return false;
+}
 function nfiLoad(wb,fileName,REG,forced){
   const det0=kitsSheet(wb), cfg=forced&&KIT_CFG[forced]?KIT_CFG[forced]:det0.cfg, det={cfg,sheet:det0?det0.sheet:wb.SheetNames[0]}, N={file:fileName,check:[],fatal:[],reg:REG||null,cfg};
   const sh=imsSheet(wb.Sheets[det.sheet]); sh.idx={};
   const cols={...NFI_COLS}; cfg.sel.forEach(s=>{ cols[s.k]={m:s.m,l:s.l,req:1}; }); if(cfg.projCol) cols.proyecto={...cfg.projCol,req:1};
   for(const [k,c] of Object.entries(cols)){ const loc=locateCol(sh,c); sh.idx[k]=loc.idx;
     N.check.push({label:c.l,how:loc.how,col:loc.idx>=0?XLSX.utils.encode_col(loc.idx):'',found:loc.idx>=0,req:!!c.req}); if(loc.idx<0&&c.req) N.fatal.push(c.l); }
-  // Kits: columnas «Cantidad …»; servicios: «Número de …» / «Litros de …»
-  N.kits=sh.labels.map((l,i)=>({i,label:l,machine:sh.machine[i]||''})).filter(x=>/^cantidad\b/i.test(x.label))
-    .map(x=>{ const name=x.label.replace(/^cantidad\s+(de\s+)?/i,'').trim(); return {...x,name:name.charAt(0).toUpperCase()+name.slice(1),proj:kitNameProject(name),total:0}; });
-  N.services=cfg.serviceRe?sh.labels.map((l,i)=>({i,label:l})).filter(x=>cfg.serviceRe.test(x.label)).map(x=>({...x,total:0})):[];
+  const usedIdx=new Set(Object.values(sh.idx).filter(i=>i>=0)), lastMetaIdx=Math.max(...usedIdx,-1);
+  // Kits: columnas «Cantidad …» o columnas numéricas de kits al final del Excel; servicios WASH excluidos
+  N.kits=sh.labels.map((l,i)=>({i,label:l,machine:sh.machine[i]||''})).filter(x=>isKitCol(sh,x,usedIdx,lastMetaIdx))
+    .map(x=>{ const name=x.label.replace(/^(cantidad|cant\.?)\s+(de\s+)?/i,'').trim()||x.label.trim(); return {...x,name:name.charAt(0).toUpperCase()+name.slice(1),proj:kitNameProject(name),total:0}; });
+  N.services=cfg.serviceRe?sh.labels.map((l,i)=>({i,label:l})).filter(x=>!usedIdx.has(x.i)&&cfg.serviceRe.test(x.label)).map(x=>({...x,total:0})):[];
   N.check.push({label:`Columnas de cantidad de kits (${N.kits.length})`,how:'Etiqueta «Cantidad …»',col:'',found:N.kits.length>0,req:true});
   if(cfg.serviceRe) N.check.push({label:`Columnas de servicios (${N.services.length})`,how:'Etiqueta «Número de …» o «Litros de …»',col:'',found:N.services.length>0,req:false});
   if(!N.kits.length) N.fatal.push('Columnas de cantidad de kits');

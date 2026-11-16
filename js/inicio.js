@@ -1,6 +1,7 @@
 /* Herramientas M&E · Novedades de la portada y arranque de la aplicación.
    Agrega cada mejora nueva al inicio de NOVEDADES (la más reciente primero). */
 const NOVEDADES=[
+  ['Noviembre 2026','Depurador IMS: incorporación en el Excel del SITREP de la pestaña consolidada «Kits» (NFI y WASH) y de un cuadro de kits entregados en la pestaña principal con filtros dinámicos por tipo de kit y rango de fechas.'],
   ['Noviembre 2026','Repositorio de tableros: incorporación del tablero DHR - General, nueva columna de tipo de actualización (Automática o Manual) y ajuste de la columna de frecuencia manteniendo las acciones de abrir y copiar.'],
   ['Noviembre 2026','Repositorio de tableros: eliminación de las tarjetas de resumen en la parte superior para mostrar directamente el listado o las tarjetas de tableros.'],
   ['Noviembre 2026','Repositorio de formularios: incorporación de los formularios regulares del proyecto DHR para Salud Mental (SMAPS), PSS (SMAPS) y Orientación legal (Protección).'],
