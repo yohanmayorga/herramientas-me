@@ -51,3 +51,14 @@ function viewSideNews(){
 1. **Posición**: Inserta siempre la nueva tupla en la **primera posición** de `NOVEDADES` en `js/inicio.js`.
 2. **Fecha (`f`)**: Usa el formato `'Mes Año'` en español con la primera letra en mayúscula (por ejemplo, `'Noviembre 2026'`).
 3. **Texto (`t`)**: Comienza con el nombre de la sección o herramienta afectada seguido de dos puntos (por ejemplo, `'Proyectos: ...'`, `'Repositorio de tableros: ...'`, `'Depurador IMS: ...'`) y resume en una sola oración clara qué se agregó o mejoró.
+
+---
+
+## 3. Actualización obligatoria de `APP_VERSION` (Cache-Busting)
+
+Cada vez que modifiques cualquier archivo de la aplicación (`index.html`, `css/**`, `js/**`), debes **incrementar automáticamente la constante centralizada `window.APP_VERSION`** en `index.html`:
+
+1. **Ubicación**: `index.html`, dentro del `<script>` inicial en `<head>` (`window.APP_VERSION='...'`).
+2. **Formato**: Usa `YYYY.MM.DD.N` (por ejemplo, `'2026.11.17.1'` -> `'2026.11.17.2'`, o actualiza la fecha si cambia el día).
+3. **Cargas dinámicas**: Si agregas nuevas hojas de estilo, scripts o cargas dinámicas en el router (`js/plataforma/navegacion.js`) u otro módulo, usa siempre el helper global `window.withAppVersion(url)` para anexar `?v=...`.
+
