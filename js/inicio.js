@@ -139,7 +139,7 @@ function homeRenderTimeline(){
       <span><i class="tl-dot warn"></i>Por finalizar ≤90d</span>
       <span><i class="tl-dot rem"></i>Plazo restante</span>
       <span><i class="tl-dot today"></i>Línea de hoy</span>
-      <a class="tl-all" href="#/proyectos">Ver detalle en Proyectos →</a>
+      <a class="tl-all" href="/proyectos">Ver detalle en Proyectos →</a>
     </div>
   </div>`;
 }
@@ -150,11 +150,11 @@ function homeBuscar(raw){
   const res=[];
   (typeof HERRAMIENTAS!=='undefined'?HERRAMIENTAS:[]).forEach(h=>{
     if(prjNorm(`${h.nombre} ${h.resumen}`).includes(q))
-      res.push({cat:'Herramienta',titulo:h.nombre,sub:h.resumen,href:`#/${h.id}`,ext:false});
+      res.push({cat:'Herramienta',titulo:h.nombre,sub:h.resumen,href:`/${h.id}`,ext:false});
   });
   (typeof PROYECTOS!=='undefined'?PROYECTOS:[]).forEach(p=>{
     if(prjNorm(`${p.nombre} ${p.codigo} ${p.tipo}`).includes(q))
-      res.push({cat:'Proyecto',titulo:`${p.nombre} (${p.codigo})`,sub:`${p.tipo} · Cierre ${prjFmt(p.fin)}`,href:p.prima||'#/proyectos',ext:Boolean(p.prima)});
+      res.push({cat:'Proyecto',titulo:`${p.nombre} (${p.codigo})`,sub:`${p.tipo} · Cierre ${prjFmt(p.fin)}`,href:p.prima||'/proyectos',ext:Boolean(p.prima)});
   });
   (typeof TABLEROS!=='undefined'?TABLEROS:[]).forEach(t=>{
     if(prjNorm(`${t.nombre} ${t.proyecto} ${t.socio}`).includes(q))
@@ -192,22 +192,22 @@ function viewPortada(){
     </section>
 
     <section class="p-kpis" aria-label="Indicadores generales">
-      <a class="pk-card" href="#/proyectos">
+      <a class="pk-card" href="/proyectos">
         <span class="pk-lbl">Proyectos activos</span>
         <strong class="pk-val">${d.activos.length}</strong>
         <span class="pk-sub">${d.porFin.length} por finalizar en ≤90 días</span>
       </a>
-      <a class="pk-card" href="#/proyectos">
+      <a class="pk-card" href="/proyectos">
         <span class="pk-lbl">Presupuesto vigente</span>
         <strong class="pk-val pk-val-sm">${esc(ppto)}</strong>
         <span class="pk-sub">Sobre ${d.activos.length} proyectos activos</span>
       </a>
-      <a class="pk-card" href="#/tableros">
+      <a class="pk-card" href="/tableros">
         <span class="pk-lbl">Tableros Power BI</span>
         <strong class="pk-val">${d.tabsAct.length}</strong>
         <span class="pk-sub">${d.tabsAuto.length} con actualización automática</span>
       </a>
-      <a class="pk-card" href="#/formularios">
+      <a class="pk-card" href="/formularios">
         <span class="pk-lbl">Formularios Kobo</span>
         <strong class="pk-val">${d.forms.length}</strong>
         <span class="pk-sub">${d.formsReg.length} regulares · ${d.formsEmer.length} emergencia</span>

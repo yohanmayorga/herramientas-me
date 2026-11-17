@@ -3,7 +3,7 @@ const NAV_KEY='herramientas-me-menu';
 const NAV={ ruta:'inicio', manual:false, gruposCerrados:new Set() };
 
 function navSide(){
-  const item=(id,nombre,ic,extra='')=>`<a class="side-i${NAV.ruta===id?' on':''}" href="#/${id}" data-tip="${esc(nombre)}"${NAV.ruta===id?' aria-current="page"':''}>${icono(ic)}<span class="side-t">${esc(nombre)}</span>${extra}</a>`;
+  const item=(id,nombre,ic,extra='')=>`<a class="side-i${NAV.ruta===id?' on':''}" href="/${id}" data-tip="${esc(nombre)}"${NAV.ruta===id?' aria-current="page"':''}>${icono(ic)}<span class="side-t">${esc(nombre)}</span>${extra}</a>`;
   return `<div class="side-sec">${item('inicio','Inicio','inicio')}</div>
     ${[...new Set(HERRAMIENTAS.map(h=>h.grupo))].map(g=>{
       const cerrado=NAV.gruposCerrados.has(g)&&!navCollapsed();
@@ -18,7 +18,7 @@ function navSide(){
 function estadoChip(e){ return e==='disponible'?'<span class="chip-st ok">Disponible</span>':'<span class="chip-st dev">En desarrollo</span>'; }
 
 function viewProximamente(h){
-  return `<div class="portal"><a class="p-back" href="#/inicio">${icono('contraer',16)} Inicio</a>
+  return `<div class="portal"><a class="p-back" href="/inicio">${icono('contraer',16)} Inicio</a>
     <section class="p-hero p-soon"><span class="p-ic">${icono(h.icono,28)}</span><div><div class="p-soonh"><h1>${esc(h.nombre)}</h1>${estadoChip(h.estado)}</div><p>${esc(h.resumen)}</p></div></section>
     <section class="p-box"><h2 class="p-title">Lo que incluirá</h2><ul class="p-list">${h.puntos.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
     <p class="muted" style="margin:14px 0 0">Esta herramienta está en preparación. Para sugerencias, escribe a <a href="mailto:ymayorga@iom.int">ymayorga@iom.int</a>.</p></section></div>`;
@@ -53,7 +53,7 @@ function navApply(){
   });
   side.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{
     navDrawer(false);
-    if(a.getAttribute('href')==='#/depurador-ims'&&NAV.ruta==='depurador-ims'){
+    if(a.getAttribute('href')==='/depurador-ims'&&NAV.ruta==='depurador-ims'){
       S.guide=false; S.dash=false;
       if(S.step===1){ S.loadMode=null; S.pending=null; }
       render();
@@ -74,12 +74,20 @@ function navApply(){
 }
 
 function navRoute(){
-  const parts=(location.hash.replace(/^#\/?/,'')||'inicio').split('/');
+  let rawPath='';
+  if(location.hash&&location.hash.startsWith('#/')){
+    rawPath=location.hash.replace(/^#\/?/,'');
+    if(location.protocol!=='file:') history.replaceState(null,'','/'+(rawPath||'inicio'));
+  } else if(location.protocol!=='file:'){
+    rawPath=location.pathname.replace(/^\/+|\/+$/g,'');
+    if(rawPath==='index.html') rawPath='';
+  }
+  const parts=(rawPath||'inicio').split('/');
   let ruta=parts[0]; if(ruta!=='inicio'&&!HERRAMIENTAS.some(h=>h.id===ruta)) ruta='inicio';
   if(ruta==='depurador-ims'&&parts[1]){ // accesos directos desde la portada
     if(parts[1]==='guia') S.guide=true;
     else { S.guide=false; S.dash=false; if(S.step===1) S.loadMode=parts[1]==='multiple'?'multi':'single'; }
-    history.replaceState(null,'','#/depurador-ims');
+    if(location.protocol!=='file:') history.replaceState(null,'','/depurador-ims');
   }
   NAV.ruta=ruta;
   navDrawer(false);
@@ -97,6 +105,27 @@ function navInit(){
       if(document.body.classList.contains('filters-open')) filterDrawer(false);
     }
   });
+  document.addEventListener('click',e=>{
+    if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey) return;
+    const a=e.target.closest('a[href]');
+    if(!a) return;
+    const raw=a.getAttribute('href')||'';
+    if(!raw.startsWith('/')||raw.startsWith('//')||a.target==='_blank'||a.hasAttribute('download')) return;
+    e.preventDefault();
+    if(raw==='/depurador-ims'&&NAV.ruta==='depurador-ims'){
+      navDrawer(false);
+      S.guide=false; S.dash=false;
+      if(S.step===1){ S.loadMode=null; S.pending=null; }
+      render();
+      return;
+    }
+    if(location.protocol==='file:'){
+      location.hash='#'+raw;
+      return;
+    }
+    if(location.pathname!==raw) history.pushState(null,'',raw);
+    navRoute();
+  });
   const top=document.querySelector('header.top'), setH=()=>document.documentElement.style.setProperty('--toph',top.offsetHeight+'px');
   setH(); if(window.ResizeObserver) new ResizeObserver(setH).observe(top);
   window.addEventListener('resize',()=>{
@@ -104,6 +133,7 @@ function navInit(){
     if(window.innerWidth>900&&!enMovilH&&document.body.classList.contains('side-open')) navDrawer(false);
     if(window.innerWidth>1160&&!enMovilH&&document.body.classList.contains('filters-open')) filterDrawer(false);
   });
+  window.addEventListener('popstate',navRoute);
   window.addEventListener('hashchange',navRoute);
   navRoute();
 }

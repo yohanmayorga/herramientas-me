@@ -34,7 +34,7 @@ const HERRAMIENTAS=[
   { id:'depurador-ims', nombre:'Depurador IMS', icono:'depurador', estado:'disponible', grupo:'Herramientas',
     resumen:'Valida y limpia las descargas del IMS y genera reportes, Power BI, informes PDF, tablero y SITREP.',
     puntos:['Registro de Familias, atenciones, actividades comunitarias y kits','Reporte de errores y limpieza avanzada del Registro','Excel para Power BI, informe PDF, tablero interactivo y SITREP'],
-    accesos:[['Archivo único','#/depurador-ims/unico'],['Depurador múltiple','#/depurador-ims/multiple'],['Guía de uso','#/depurador-ims/guia']] },
+    accesos:[['Archivo único','/depurador-ims/unico'],['Depurador múltiple','/depurador-ims/multiple'],['Guía de uso','/depurador-ims/guia']] },
   { id:'formularios', nombre:'Repositorio de formularios', icono:'formularios', estado:'disponible', grupo:'Herramientas',
     resumen:'Catálogo de los formularios de KoboToolbox utilizados para el levantamiento de información en los proyectos y áreas de la organización.',
     puntos:['Filtros por proyecto, área temática y tipo (regular o emergencia)','Búsqueda rápida por nombre de formulario, proyecto o área','Acceso directo al formulario en KoboToolbox y copia rápida de enlace'],

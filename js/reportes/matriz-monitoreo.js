@@ -13,6 +13,14 @@ const MMAT = {
   manual: {},    // valores manuales fijos por campo cuando se elige '__manual__'
   xlsform: null, // perfil del XLSForm cargado en la sesión actual (sin guardar en memoria)
   koboReady: false, // true cuando el usuario hace clic en Avanzar en Kobo
+  excelReady: false, // true cuando el usuario completa los datos faltantes y avanza en Excel
+  excelCountMode: '', // 'bands' | 'col' | 'row' | 'fixed'
+  excelFixedCount: 1,
+  excelAgeRand: false,
+  excelAgeMin: 0,
+  excelAgeMax: 74,
+  excelSexMode: '', // '' | 'random' | 'equal' | 'all_f' | 'all_m' | 'maj_f' | 'maj_m'
+  excelGeo: { estado:'', mun:'', parr:'', com:'', comCustom:'' },
   defProj: 'DHR Emergencia',
   defProjOtro: '',
   defSector: 'NFI',
@@ -49,19 +57,21 @@ const MMAT_SOURCES = [
 ];
 
 const MMAT_FIELDS = [
-  { k:'fecha', l:'Fecha', aliases:['fecha','fecha de asistencia','fecha de entrega','assistance_date','date','submission_time'] },
+  { k:'fecha', l:'Fecha', aliases:['fecha','fecha de asistencia','fecha de entrega','assistance_date','date','submission_time'], exclude:['nacimiento'] },
   { k:'proyecto', l:'Proyecto', aliases:['proyecto','project','donante','programa'] },
   { k:'socio', l:'Socio implementador', aliases:['socio','socio implementador','implementing_partner','organizacion','partner'] },
-  { k:'estado', l:'Estado', aliases:['estado','states','entidad federal','state'] },
+  { k:'estado', l:'Estado', aliases:['estado','states','entidad federal','state'], exclude:['estado civil','embarazo','lactancia'] },
   { k:'municipio', l:'Municipio', aliases:['municipio','municipalities','municipality'] },
   { k:'parroquia', l:'Parroquia', aliases:['parroquia','parishes','parish'] },
-  { k:'comunidad', l:'Comunidad', aliases:['comunidad','communities','community','sector o comunidad'] },
+  { k:'comunidad', l:'Comunidad', aliases:['comunidad','communities','community','sector o comunidad'], exclude:['actividad comunitaria'] },
   { k:'sector', l:'Sector', aliases:['sector','area','tipo de kit','tipo'] },
   { k:'caso', l:'Código de familia / caso (para recurrentes)', aliases:['codigo de caso','codigo de familia','case_code','id familia','familia'] },
+  { k:'nombres', l:'Nombres (para inferir sexo si falta)', aliases:['nombres','nombre y apellido','nombre completo','nombre','primer nombre'] },
+  { k:'total_personas', l:'Total personas / asistencias (si agrupa varias)', aliases:['total personas','total asistencias','asistencias','cantidad de personas','personas','participantes','beneficiarios'] },
   { k:'indig', l:'Población indígena', aliases:['poblacion indigena','numero de poblacion indigena','indigena','etnia','pueblo indigena'] },
   { k:'disc', l:'Personas con discapacidad', aliases:['personas con discapacidad','numero de personas con discapacidad','discapacidad'] },
   { k:'preg', l:'Embarazadas o en lactancia', aliases:['embarazadas','embarazadas o en lactancia','numero de personas embarazadas o en lactancia','lactante'] },
-  { k:'sexo', l:'Sexo (si es 1 fila por persona)', aliases:['sexo','sex','genero'] },
+  { k:'sexo', l:'Sexo (si es 1 fila por persona)', aliases:['sexo','sex','genero'], exclude:['orientacion'] },
   { k:'edad', l:'Edad (si es 1 fila por persona)', aliases:['edad','age','edad en anos'] },
   { k:'kits', l:'Total kits', aliases:['total kits','kits','cantidad de kits','cantidad'] }
 ];
@@ -69,8 +79,25 @@ const MMAT_FIELDS = [
 const mmAutoMap = headers => {
   const map = {};
   MMAT_FIELDS.forEach(f => {
-    const idx = headers.findIndex(h => f.aliases.some(a => fold(h) === fold(a) || fold(h).includes(fold(a))));
-    map[f.k] = idx >= 0 ? headers[idx] : '';
+    const pool = headers.filter(h => {
+      if(!f.exclude || !f.exclude.length) return true;
+      const fh = fold(h);
+      return !f.exclude.some(ex => fh.includes(fold(ex)));
+    });
+    let hit = '';
+    for(const a of f.aliases){
+      const fa = fold(a);
+      hit = pool.find(h => fold(h) === fa);
+      if(hit) break;
+    }
+    if(!hit){
+      for(const a of f.aliases){
+        const fa = fold(a);
+        hit = pool.find(h => fold(h).includes(fa));
+        if(hit) break;
+      }
+    }
+    map[f.k] = hit || '';
   });
   map.bands = MAT_BANDS.flatMap(([fl, ml]) => [fl, ml]).map(lbl => {
     const hit = headers.find(h => fold(h) === fold(lbl));
@@ -102,6 +129,7 @@ function mmParseRaw(wb, fileName){
     headers.forEach((hd, ci) => { o[hd] = r[ci] ?? null; });
     rows.push(o);
   }
+  if(!rows.length) throw new Error('El archivo está vacío o no contiene filas de datos.');
   return { name: fileName, sheet, headers, selectHeaders: headers, rows, linkedInfo: null, sig: '' };
 }
 
@@ -551,28 +579,144 @@ function mmImputePerson(p, a){
   };
 }
 
+let _MM_GEO_CAT = null;
+function _mmGeoCatalog(){
+  if(_MM_GEO_CAT) return _MM_GEO_CAT;
+  const estSet = new Set(), munsByE = new Map(), parrsByEM = new Map(), comsByEMP = new Map();
+  const title = s => String(s || '').replace(/\b([a-záéíóúñü])([a-záéíóúñü]*)/gi, (_, a, b) => a.toUpperCase() + b);
+  if(typeof GEO_INE_EMP !== 'undefined' && Array.isArray(GEO_INE_EMP)){
+    GEO_INE_EMP.forEach(s => {
+      const [e, m, p] = s.split('|');
+      if(!e || !m || !p) return;
+      estSet.add(e);
+      if(!munsByE.has(e)) munsByE.set(e, new Set());
+      munsByE.get(e).add(m);
+      const em = `${e}|${m}`;
+      if(!parrsByEM.has(em)) parrsByEM.set(em, new Set());
+      parrsByEM.get(em).add(p);
+    });
+  }
+  if(typeof GEO_INE_COM !== 'undefined' && GEO_INE_COM && typeof GEO_INE_EMP !== 'undefined'){
+    Object.entries(GEO_INE_COM).forEach(([k, idx]) => {
+      const emp = GEO_INE_EMP[idx];
+      if(!emp) return;
+      const rawName = k.includes('|') ? k.split('|').slice(1).join('|') : k;
+      if(!rawName) return;
+      if(!comsByEMP.has(emp)) comsByEMP.set(emp, new Set());
+      comsByEMP.get(emp).add(title(rawName));
+    });
+  }
+  const cmp = (a, b) => a.localeCompare(b, 'es');
+  _MM_GEO_CAT = {
+    estados: [...estSet].sort(cmp),
+    muns: e => [...(munsByE.get(e) || [])].sort(cmp),
+    parrs: (e, m) => [...(parrsByEM.get(`${e}|${m}`) || [])].sort(cmp),
+    coms: (e, m, p) => [...(comsByEMP.get(`${e}|${m}|${p}`) || [])].sort(cmp)
+  };
+  return _MM_GEO_CAT;
+}
+
+function mmExcelComVal(){
+  const g = MMAT.excelGeo;
+  if(!g) return '';
+  return g.com === '__custom__' ? (g.comCustom || '').trim() : (g.com || '').trim();
+}
+
+function mmExcelValidation(){
+  const R = MMAT.raw, M = MMAT.map || {};
+  if(!R || !R.rows || !R.rows.length){
+    return { ok:false, missing:['Archivo vacío o sin filas de datos'], hasBands:false, hasCount:false, hasAge:false, hasSex:false, hasNames:false, needGeo:true, needEst:true, needMun:true, needParr:true, needCom:true, needRandAgeSex:false };
+  }
+  const hasColData = k => (M[k] === '__manual__' && !!(MMAT.manual[k] || '').trim())
+    || (!!M[k] && M[k] !== '__manual__' && R.rows.some(r => toText(r[M[k]])));
+  const hasBands = (M.bands || []).some(b => !!b.col);
+  const hasTotalCol = hasColData('total_personas');
+  const mode = MMAT.excelCountMode || (hasBands ? 'bands' : (hasTotalCol ? 'col' : ''));
+  const hasCount = (mode === 'bands' && hasBands)
+    || (mode === 'col' && hasTotalCol)
+    || (mode === 'row' && R.rows.length > 0)
+    || (mode === 'fixed' && Number(MMAT.excelFixedCount) > 0);
+
+  const hasEstCol = hasColData('estado');
+  const hasMunCol = hasColData('municipio');
+  const hasParrCol = hasColData('parroquia');
+  const hasComCol = hasColData('comunidad');
+  const needGeo = !hasEstCol || !hasMunCol || !hasParrCol || !hasComCol;
+
+  const hasEst = hasEstCol || !!MMAT.excelGeo.estado;
+  const hasMun = hasMunCol || !!MMAT.excelGeo.mun;
+  const hasParr = hasParrCol || !!MMAT.excelGeo.parr;
+  const hasCom = hasComCol || !!mmExcelComVal();
+
+  const hasAge = hasBands || hasColData('edad');
+  const hasSex = hasBands || hasColData('sexo');
+  const hasNames = hasColData('nombres');
+  const needAgeRand = !hasBands && !hasAge;
+  const needSexAssign = !hasBands && !hasSex;
+
+  const missing = [];
+  if(!hasCount) missing.push('Forma de contar asistencias / personas');
+  if(!hasEst) missing.push('Estado');
+  if(!hasMun) missing.push('Municipio');
+  if(!hasParr) missing.push('Parroquia');
+  if(!hasCom) missing.push('Comunidad');
+  if(needAgeRand && !MMAT.excelAgeRand) missing.push('Activar asignación aleatoria de edades');
+  if(needSexAssign && !MMAT.excelSexMode) missing.push('Seleccionar cómo asignar el sexo');
+
+  return {
+    ok: missing.length === 0,
+    missing,
+    hasBands,
+    hasTotalCol,
+    hasCount,
+    mode,
+    hasAge,
+    hasSex,
+    hasNames,
+    needGeo,
+    needEst: !hasEst,
+    needMun: !hasMun,
+    needParr: !hasParr,
+    needCom: !hasCom,
+    needAgeRand,
+    needSexAssign
+  };
+}
+
 function mmComputeGeneric(){
   const R = MMAT.raw, M = MMAT.map;
   if(!R) return null;
-  const g = (r, k) => M[k] ? r[M[k]] : null;
-  const defP = MMAT.defProj === 'Otro' ? (MMAT.defProjOtro.trim() || 'Otro') : MMAT.defProj;
-  const seenBySec = new Map(), grpMap = new Map();
+  const g = (r, k) => {
+    const col = M[k];
+    if(col === '__manual__') return MMAT.manual[k] || '';
+    return col ? r[col] : null;
+  };
+  const defP = (MMAT.defProj || '').trim() || 'DHR Emergencia';
+  const defS = (MMAT.defSector || '').trim() || 'NFI';
+  const seenBySec = new Map(), grpMap = new Map(), ajustes = [];
   let omitSocio = 0, omitFecha = 0, omitEmpty = 0;
+
+  const hasBands = (M.bands || []).some(b => !!b.col);
+  const mode = MMAT.excelCountMode || (hasBands ? 'bands' : (M.total_personas ? 'col' : 'row'));
+  const geoComFallback = mmExcelComVal();
+  const aMin = Math.max(0, Math.min(110, Number(MMAT.excelAgeMin) || 0));
+  const aMax = Math.max(aMin, Math.min(110, MMAT.excelAgeMax === '' || MMAT.excelAgeMax == null ? 74 : Number(MMAT.excelAgeMax)));
+  let sexSeq = 0;
 
   const sorted = R.rows.map(r => ({ r, fecha: M.fecha ? toDate(g(r, 'fecha')) : '' }))
     .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || '') || a.r._row - b.r._row);
 
-  sorted.forEach(({ r, fecha }) => {
+  sorted.forEach(({ r, fecha }, idx) => {
     const socio = toText(g(r, 'socio')) || '';
-    if(M.socio && MMAT.validSocios.size && !MMAT.validSocios.has(fold(socio || '(vacío)'))){ omitSocio++; return; }
+    if(M.socio && M.socio !== '__manual__' && MMAT.validSocios.size && !MMAT.validSocios.has(fold(socio || '(vacío)'))){ omitSocio++; return; }
     if((MMAT.from || MMAT.to) && (!fecha || (MMAT.from && fecha < MMAT.from) || (MMAT.to && fecha > MMAT.to))){ omitFecha++; return; }
 
     const proj = toText(g(r, 'proyecto')) || defP;
-    const sector = toText(g(r, 'sector')) || MMAT.defSector || 'NFI';
-    const estado = toText(g(r, 'estado')) || '';
-    const mun = toText(g(r, 'municipio')) || '';
-    const parr = toText(g(r, 'parroquia')) || '';
-    const com = toText(g(r, 'comunidad')) || '';
+    const sector = toText(g(r, 'sector')) || defS;
+    const estado = toText(g(r, 'estado')) || MMAT.excelGeo.estado || '';
+    const mun = toText(g(r, 'municipio')) || MMAT.excelGeo.mun || '';
+    const parr = toText(g(r, 'parroquia')) || MMAT.excelGeo.parr || '';
+    const com = toText(g(r, 'comunidad')) || geoComFallback || '';
 
     const caso = toText(g(r, 'caso'));
     let rec = 'NO';
@@ -582,30 +726,81 @@ function mmComputeGeneric(){
       if(s.has(ck)) rec = 'SÍ'; else s.add(ck);
     }
 
-    const ages = Array(18).fill(0);
-    let hasBandCols = false;
-    (M.bands || []).forEach((b, bi) => {
-      if(b.col){ hasBandCols = true; const v = toNum(r[b.col]); if(v && v > 0) ages[bi] += v; }
-    });
-    if(!hasBandCols && M.sexo && M.edad){
-      const sx = fold(toText(g(r, 'sexo'))), age = toNum(g(r, 'edad'));
-      if(age != null && (sx === 'mujer' || sx === 'femenino' || sx === 'f' || sx === 'hombre' || sx === 'masculino' || sx === 'm')){
-        const isF = sx === 'mujer' || sx === 'femenino' || sx === 'f';
-        const bi = MAT_BANDS.findIndex(([,, lo, hi]) => age >= lo && age <= hi);
-        if(bi >= 0) ages[bi * 2 + (isF ? 0 : 1)]++;
-      }
-    }
-
     const toFlagNum = v => {
       if(v == null) return 0;
       const n = toNum(v); if(n != null) return Math.max(0, n);
       const f = fold(toText(v));
-      return f && !['no','ninguno','ninguna','no aplica','na','n a'].includes(f) ? 1 : 0;
+      return f && !['no','ninguno','ninguna','no aplica','na','n a','0','false'].includes(f) ? 1 : 0;
     };
     const indig = toFlagNum(g(r, 'indig'));
     const disc = toFlagNum(g(r, 'disc'));
     const preg = toFlagNum(g(r, 'preg'));
     const kits = Math.max(0, toNum(g(r, 'kits')) || 0);
+
+    const ages = Array(18).fill(0);
+    if(mode === 'bands' && hasBands){
+      (M.bands || []).forEach((b, bi) => {
+        if(b.col){ const v = toNum(r[b.col]); if(v && v > 0) ages[bi] += v; }
+      });
+    } else {
+      let nPers = 1;
+      if(mode === 'col' && M.total_personas){
+        nPers = Math.max(0, Math.floor(toNum(g(r, 'total_personas')) || 0));
+      } else if(mode === 'fixed'){
+        nPers = Math.max(1, Math.floor(Number(MMAT.excelFixedCount) || 1));
+      }
+
+      const rawSex = M.sexo ? mmKoboNormSex(g(r, 'sexo')) : '';
+      const rawAgeNum = M.edad ? toNum(g(r, 'edad')) : null;
+      const rawAge = rawAgeNum != null && rawAgeNum >= 0 && rawAgeNum <= 120 ? Math.floor(rawAgeNum) : null;
+      const nombre = toText(g(r, 'nombres')) || '';
+
+      for(let pi = 0; pi < nPers; pi++){
+        let sx = rawSex;
+        let sxWhy = '';
+        if(!sx){
+          const inf = (nombre && pi === 0) ? mmInferSex({ name: nombre, preg: preg ? 'Si' : '' }, idx + pi) : null;
+          if(inf && inf.why !== 'asignado aleatoriamente'){
+            sx = inf.sexo;
+            sxWhy = inf.why;
+          } else if(MMAT.excelSexMode){
+            const m = MMAT.excelSexMode;
+            if(m === 'all_f'){ sx = 'Mujer'; sxWhy = 'regla: todas mujeres'; }
+            else if(m === 'all_m'){ sx = 'Hombre'; sxWhy = 'regla: todos hombres'; }
+            else if(m === 'equal'){ sx = (sexSeq++ % 2 === 0) ? 'Mujer' : 'Hombre'; sxWhy = 'regla: proporciones iguales (50/50)'; }
+            else if(m === 'maj_f'){ sx = Math.random() < 0.7 ? 'Mujer' : 'Hombre'; sxWhy = 'regla: mayoritariamente mujeres (70/30)'; }
+            else if(m === 'maj_m'){ sx = Math.random() < 0.7 ? 'Hombre' : 'Mujer'; sxWhy = 'regla: mayoritariamente hombres (70/30)'; }
+            else { sx = Math.random() < 0.5 ? 'Mujer' : 'Hombre'; sxWhy = 'asignado aleatoriamente'; }
+          }
+        }
+        let age = rawAge;
+        let ageWhy = '';
+        if(age == null && MMAT.excelAgeRand){
+          age = aMin + Math.floor(Math.random() * (aMax - aMin + 1));
+          ageWhy = `asignada aleatoriamente (${aMin}–${aMax} años)`;
+        }
+        if(sx && age != null){
+          const bi = MAT_BANDS.findIndex(([,, lo, hi]) => age >= lo && age <= hi);
+          if(bi >= 0) ages[bi * 2 + (sx === 'Mujer' ? 0 : 1)]++;
+          if((!rawSex || rawAge == null) && (sxWhy || ageWhy)){
+            const partes = [];
+            if(rawAge == null && ageWhy) partes.push(`edad ${age} años (${ageWhy})`);
+            if(!rawSex && sxWhy) partes.push(`sexo ${sx} (${sxWhy})`);
+            ajustes.push({
+              filaIms: r._row,
+              codigoAsistencia: '',
+              codigoCaso: caso || '',
+              filaRegistro: 'Excel personalizado',
+              persona: nombre || `Fila ${r._row}${nPers > 1 ? ` (#${pi + 1})` : ''}`,
+              parentesco: '—',
+              faltante: (rawAge == null && !rawSex) ? 'Edad y sexo' : (rawAge == null ? 'Edad' : 'Sexo'),
+              asignacion: `Se asignó ${partes.join(' y ')}.`
+            });
+          }
+        }
+      }
+    }
+
     const totP = ages.reduce((s, v) => s + v, 0);
     if(!totP && !kits && !indig && !disc && !preg){ omitEmpty++; return; }
 
@@ -622,7 +817,7 @@ function mmComputeGeneric(){
   if(omitSocio) omitted.push(`${fmt(omitSocio)} registro(s) de socio(s) marcados como no válidos`);
   if(omitFecha) omitted.push(`${fmt(omitFecha)} registro(s) fuera del rango de fechas seleccionado`);
   if(omitEmpty) omitted.push(`${fmt(omitEmpty)} fila(s) sin personas ni kits registrados`);
-  return { outRows, omitted, ajustes: [] };
+  return { outRows, omitted, ajustes };
 }
 
 function mmKoboVal(r, k){
@@ -1372,9 +1567,122 @@ function viewMatrizMonitoreo(){
     }
   }
 
-  const res = (MMAT.source === 'kobo' && !MMAT.koboReady) ? null : mmComputeActive();
+  const excelVal = MMAT.source === 'excel' && MMAT.raw ? mmExcelValidation() : null;
+  if(MMAT.source === 'excel' && MMAT.raw && excelVal){
+    const cat = _mmGeoCatalog();
+    const g = MMAT.excelGeo;
+    const muns = g.estado ? cat.muns(g.estado) : [];
+    const parrs = (g.estado && g.mun) ? cat.parrs(g.estado, g.mun) : [];
+    const coms = (g.estado && g.mun && g.parr) ? cat.coms(g.estado, g.mun, g.parr) : [];
+    const showCustomCom = g.com === '__custom__' || (g.parr && coms.length === 0 && g.com !== '');
+
+    body += `<h2>Verificación y datos faltantes (EXCEL)</h2>
+    <div class="panel" style="margin-bottom:14px">`;
+
+    if(!excelVal.hasBands){
+      body += `<div style="margin-bottom:14px">
+        <div class="pj-fl" style="margin-bottom:6px">Forma de contar asistencias / personas</div>
+        <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">
+          <select class="in" id="mmExcelCountMode" style="min-width:260px">
+            <option value=""${!excelVal.mode ? ' selected' : ''}>— Seleccionar cómo contar asistencias —</option>
+            <option value="row"${excelVal.mode === 'row' ? ' selected' : ''}>1 persona por cada fila (${fmt(MMAT.raw.rows.length)} filas)</option>
+            <option value="col"${excelVal.mode === 'col' ? ' selected' : ''}${excelVal.hasTotalCol ? '' : ' disabled'}>Usar columna «Total personas / asistencias»${excelVal.hasTotalCol ? '' : ' (no mapeada)'}</option>
+            <option value="fixed"${excelVal.mode === 'fixed' ? ' selected' : ''}>Cantidad fija de personas por fila</option>
+          </select>
+          <input type="number" class="in" id="mmExcelFixedCount" min="1" value="${esc(MMAT.excelFixedCount || 1)}" style="width:110px;${excelVal.mode === 'fixed' ? '' : 'display:none'}" aria-label="Personas por fila">
+        </div>
+      </div>`;
+    } else {
+      body += `<div class="note ok" style="margin-bottom:12px">Se detectaron columnas de desagregación por bandas de edad y sexo.</div>`;
+    }
+
+    if(excelVal.needGeo){
+      body += `<div style="margin-bottom:14px">
+        <div class="pj-fl" style="margin-bottom:4px">Ubicación geográfica (desplegables condicionados)</div>
+        <p class="muted" style="margin:0 0 10px;font-size:13px">Faltan datos de ubicación en el archivo. Selecciona Estado, Municipio, Parroquia y Comunidad para completar las filas sin ubicación:</p>
+        <div class="grid2" style="gap:10px">
+          <label class="pj-fg"><span class="pj-fl">Estado${excelVal.needEst ? ' *' : ' (filtro)'}</span>
+            <select class="in" id="mmGeoEst">
+              <option value="">— Seleccionar estado —</option>
+              ${cat.estados.map(e => `<option value="${esc(e)}"${g.estado === e ? ' selected' : ''}>${esc(e)}</option>`).join('')}
+            </select>
+          </label>
+          <label class="pj-fg"><span class="pj-fl">Municipio${excelVal.needMun ? ' *' : ' (filtro)'}</span>
+            <select class="in" id="mmGeoMun" ${g.estado ? '' : 'disabled'}>
+              <option value="">— Seleccionar municipio —</option>
+              ${muns.map(m => `<option value="${esc(m)}"${g.mun === m ? ' selected' : ''}>${esc(m)}</option>`).join('')}
+            </select>
+          </label>
+          <label class="pj-fg"><span class="pj-fl">Parroquia${excelVal.needParr ? ' *' : ' (filtro)'}</span>
+            <select class="in" id="mmGeoParr" ${g.mun ? '' : 'disabled'}>
+              <option value="">— Seleccionar parroquia —</option>
+              ${parrs.map(p => `<option value="${esc(p)}"${g.parr === p ? ' selected' : ''}>${esc(p)}</option>`).join('')}
+            </select>
+          </label>
+          <label class="pj-fg"><span class="pj-fl">Comunidad${excelVal.needCom ? ' *' : ''}</span>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <select class="in" id="mmGeoCom" ${g.parr ? '' : 'disabled'} style="flex:1;min-width:180px">
+                <option value="">— Seleccionar comunidad —</option>
+                ${coms.map(c => `<option value="${esc(c)}"${g.com === c ? ' selected' : ''}>${esc(c)}</option>`).join('')}
+                <option value="__custom__"${g.com === '__custom__' ? ' selected' : ''}>— Otra / escribir manualmente —</option>
+              </select>
+              <input type="text" class="in" id="mmGeoComCustom" value="${esc(g.comCustom || '')}" placeholder="Escribir comunidad…" style="flex:1;min-width:160px;${showCustomCom ? '' : 'display:none'}">
+            </div>
+          </label>
+        </div>
+      </div>`;
+    }
+
+    if(excelVal.needAgeRand){
+      body += `<div style="margin-bottom:14px">
+        <div class="pj-fl" style="margin-bottom:4px">Asignación de edades faltantes</div>
+        <p class="muted" style="margin:0 0 8px;font-size:13px">No se detectó columna de edad. Activa la asignación aleatoria e indica el rango de edades:</p>
+        <label class="check" style="font-weight:500;margin-bottom:8px">
+          <input type="checkbox" id="mmExcelAgeRand" ${MMAT.excelAgeRand ? 'checked' : ''}>
+          Asignar edades de manera aleatoria
+        </label>
+        <div class="row" style="gap:10px;flex-wrap:wrap;align-items:flex-end;${MMAT.excelAgeRand ? '' : 'opacity:.6'}">
+          <label class="pj-fg" style="width:auto"><span class="pj-fl">Edad desde</span><input type="number" class="in" id="mmExcelAgeMin" min="0" max="110" value="${esc(MMAT.excelAgeMin)}" style="width:100px" ${MMAT.excelAgeRand ? '' : 'disabled'}></label>
+          <label class="pj-fg" style="width:auto"><span class="pj-fl">Edad hasta</span><input type="number" class="in" id="mmExcelAgeMax" min="0" max="110" value="${esc(MMAT.excelAgeMax)}" style="width:100px" ${MMAT.excelAgeRand ? '' : 'disabled'}></label>
+        </div>
+      </div>`;
+    }
+
+    if(excelVal.needSexAssign){
+      const sexOpts = [
+        ['', '— Seleccionar cómo asignar el sexo —'],
+        ['random', 'Totalmente aleatorio'],
+        ['equal', 'Proporciones iguales (50% mujeres / 50% hombres)'],
+        ['all_f', 'Todas mujeres (100% Mujeres)'],
+        ['all_m', 'Todos hombres (100% Hombres)'],
+        ['maj_f', 'Mayoritariamente mujeres (~70% Mujeres / 30% Hombres)'],
+        ['maj_m', 'Mayoritariamente hombres (~70% Hombres / 30% Mujeres)']
+      ];
+      body += `<div style="margin-bottom:14px">
+        <div class="pj-fl" style="margin-bottom:4px">Asignación de sexo faltante</div>
+        <p class="muted" style="margin:0 0 8px;font-size:13px">${excelVal.hasNames ? 'Se intentará inferir el sexo desde la columna de nombres; cuando no se reconozca, se aplicará esta regla:' : 'No se detectó columna de sexo ni nombres para inferirlo. Selecciona cómo asignar el sexo:'}</p>
+        <select class="in" id="mmExcelSexMode" style="max-width:460px">
+          ${sexOpts.map(([v, l]) => `<option value="${v}"${MMAT.excelSexMode === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}
+        </select>
+      </div>`;
+    }
+
+    if(!excelVal.ok){
+      body += `<div class="note bad" style="margin-bottom:12px">No puedes avanzar todavía. Falta indicar: <b>${esc(excelVal.missing.join(' · '))}</b>.</div>`;
+    } else {
+      body += `<div class="note ok" style="margin-bottom:12px">Datos mínimos verificados (${fmt(MMAT.raw.rows.length)} filas listas para procesar).</div>`;
+    }
+    body += `<button class="btn primary" type="button" id="mmExcelAdvance" ${excelVal.ok ? '' : 'disabled'}>${MMAT.excelReady && excelVal.ok ? 'Actualizar periodo y exportación' : 'Avanzar a periodo y exportación →'}</button>
+    </div>`;
+  }
+
+  const res = (MMAT.source === 'kobo' && !MMAT.koboReady)
+    ? null
+    : (MMAT.source === 'excel' && (!MMAT.excelReady || !excelVal || !excelVal.ok))
+      ? null
+      : mmComputeActive();
   const hasOutput = res && res.outRows.length > 0;
-  const hasAdj = (MMAT.source === 'ims' || MMAT.source === 'kobo') && res && res.ajustes && res.ajustes.length > 0;
+  const hasAdj = (MMAT.source === 'ims' || MMAT.source === 'kobo' || MMAT.source === 'excel') && res && res.ajustes && res.ajustes.length > 0;
 
   let exportHtml = '';
   if(res){
@@ -1392,7 +1700,7 @@ function viewMatrizMonitoreo(){
       <p class="muted">${hasOutput ? `${fmt(res.outRows.length)} fila(s) listas para exportar en el formato oficial de la Matriz de monitoreo.` : 'No hay filas válidas con los filtros y socios seleccionados.'}</p>
       <div class="row" style="gap:10px;flex-wrap:wrap">
         <button class="btn primary" type="button" id="mmExportBtn" ${hasOutput ? '' : 'disabled'}>Descargar Excel</button>
-        ${(MMAT.source === 'ims' || MMAT.source === 'kobo') ? `<button class="btn" type="button" id="mmExportAdj" ${hasAdj ? '' : 'disabled'}>Descargar ajustes${res.ajustes ? ` (${fmt(res.ajustes.length)})` : ''}</button>` : ''}
+        ${(MMAT.source === 'ims' || MMAT.source === 'kobo' || MMAT.source === 'excel') ? `<button class="btn" type="button" id="mmExportAdj" ${hasAdj ? '' : 'disabled'}>Descargar ajustes${res.ajustes ? ` (${fmt(res.ajustes.length)})` : ''}</button>` : ''}
       </div>
     </div>`;
   }
@@ -1438,7 +1746,12 @@ function viewMatrizMonitoreo(){
 }
 
 function mmRefreshOutput(){
-  const res = (MMAT.source === 'kobo' && !MMAT.koboReady) ? null : mmComputeActive();
+  const excelVal = MMAT.source === 'excel' && MMAT.raw ? mmExcelValidation() : null;
+  const res = (MMAT.source === 'kobo' && !MMAT.koboReady)
+    ? null
+    : (MMAT.source === 'excel' && (!MMAT.excelReady || !excelVal || !excelVal.ok))
+      ? null
+      : mmComputeActive();
   const hasOutput = res && res.outRows.length > 0;
   const exBtn = $('#mmExportBtn'), adjBtn = $('#mmExportAdj');
   if(exBtn) exBtn.disabled = !hasOutput;
@@ -1492,10 +1805,19 @@ async function mmLoadMainFile(f){
     } else {
       MMAT.defProj = '';
       MMAT.defSector = '';
+      MMAT.excelReady = false;
+      MMAT.excelAgeRand = false;
+      MMAT.excelAgeMin = 0;
+      MMAT.excelAgeMax = 74;
+      MMAT.excelSexMode = '';
+      MMAT.excelFixedCount = 1;
+      MMAT.excelGeo = { estado:'', mun:'', parr:'', com:'', comCustom:'' };
       const raw = mmParseRaw(wb, f.name);
       MMAT.raw = raw;
       MMAT.map = mmAutoMap(raw.headers);
       MMAT.manual = {};
+      const hasBands = (MMAT.map.bands || []).some(b => !!b.col);
+      MMAT.excelCountMode = hasBands ? 'bands' : (MMAT.map.total_personas ? 'col' : 'row');
       mmSyncRawMeta();
     }
   }catch(e){
@@ -1533,11 +1855,23 @@ function mmSyncRawMeta(){
 
 function bindMatrizMonitoreo(){
   const on = (sel, ev, fn) => { const el = $(sel); if(el) el.addEventListener(ev, fn); };
+  const navKeepScroll = () => {
+    const y = window.scrollY;
+    navApply();
+    window.scrollTo(0, y);
+  };
   document.querySelectorAll('[data-msrc]').forEach(b => b.onclick = () => {
     MMAT.source = b.dataset.msrc;
     MMAT.file = null; MMAT.wb = null; MMAT.imsType = ''; MMAT.imsDet = ''; MMAT.imsObj = null; MMAT.raw = null;
     MMAT.xlsform = null;
     MMAT.koboReady = false;
+    MMAT.excelReady = false;
+    MMAT.excelCountMode = '';
+    MMAT.excelAgeRand = false;
+    MMAT.excelAgeMin = 0;
+    MMAT.excelAgeMax = 74;
+    MMAT.excelSexMode = '';
+    MMAT.excelGeo = { estado:'', mun:'', parr:'', com:'', comCustom:'' };
     MMAT.defProj = MMAT.source === 'ims' ? 'DHR Emergencia' : '';
     MMAT.defSector = MMAT.source === 'ims' ? 'NFI' : '';
     navApply();
@@ -1669,15 +2003,97 @@ function bindMatrizMonitoreo(){
       const hintEl = document.querySelector(`[data-mhint="${k}"]`);
       if(hintEl) hintEl.style.display = sel.value === '' ? '' : 'none';
       if(MMAT.source === 'kobo' && MMAT.raw.sig) mmSaveKoboPrefs(MMAT.raw.sig, MMAT.map, MMAT.manual);
-      if(k === 'socio' || k === 'fecha'){ mmSyncRawMeta(); navApply(); }
+      if(k === 'socio' || k === 'fecha'){ mmSyncRawMeta(); navKeepScroll(); }
+      else if(MMAT.source === 'excel' && ['estado','municipio','parroquia','comunidad','edad','sexo','nombres','total_personas'].includes(k)){
+        if(k === 'total_personas' && sel.value && MMAT.excelCountMode !== 'col') MMAT.excelCountMode = 'col';
+        navKeepScroll();
+      }
       else mmRefreshOutput();
     });
     document.querySelectorAll('[data-mmanual]').forEach(inp => inp.oninput = () => {
       const k = inp.dataset.mmanual;
       MMAT.manual[k] = inp.value;
       if(MMAT.source === 'kobo' && MMAT.raw.sig) mmSaveKoboPrefs(MMAT.raw.sig, MMAT.map, MMAT.manual);
+      if(MMAT.source === 'excel' && ['estado','municipio','parroquia','comunidad','edad','sexo','nombres','total_personas'].includes(k)){
+        const btn = $('#mmExcelAdvance');
+        const ev = mmExcelValidation();
+        if(btn) btn.disabled = !ev.ok;
+      }
       mmRefreshOutput();
     });
+    if(MMAT.source === 'excel'){
+      on('#mmExcelCountMode', 'change', e => {
+        MMAT.excelCountMode = e.target.value;
+        navKeepScroll();
+      });
+      on('#mmExcelFixedCount', 'input', e => {
+        MMAT.excelFixedCount = Math.max(1, parseInt(e.target.value, 10) || 1);
+        const btn = $('#mmExcelAdvance');
+        if(btn) btn.disabled = !mmExcelValidation().ok;
+        mmRefreshOutput();
+      });
+      on('#mmGeoEst', 'change', e => {
+        MMAT.excelGeo.estado = e.target.value;
+        MMAT.excelGeo.mun = '';
+        MMAT.excelGeo.parr = '';
+        MMAT.excelGeo.com = '';
+        MMAT.excelGeo.comCustom = '';
+        navKeepScroll();
+      });
+      on('#mmGeoMun', 'change', e => {
+        MMAT.excelGeo.mun = e.target.value;
+        MMAT.excelGeo.parr = '';
+        MMAT.excelGeo.com = '';
+        MMAT.excelGeo.comCustom = '';
+        navKeepScroll();
+      });
+      on('#mmGeoParr', 'change', e => {
+        MMAT.excelGeo.parr = e.target.value;
+        MMAT.excelGeo.com = '';
+        MMAT.excelGeo.comCustom = '';
+        navKeepScroll();
+      });
+      on('#mmGeoCom', 'change', e => {
+        MMAT.excelGeo.com = e.target.value;
+        if(e.target.value !== '__custom__') MMAT.excelGeo.comCustom = '';
+        navKeepScroll();
+      });
+      on('#mmGeoComCustom', 'input', e => {
+        MMAT.excelGeo.comCustom = e.target.value;
+        const btn = $('#mmExcelAdvance');
+        if(btn) btn.disabled = !mmExcelValidation().ok;
+        mmRefreshOutput();
+      });
+      on('#mmExcelAgeRand', 'change', e => {
+        MMAT.excelAgeRand = e.target.checked;
+        navKeepScroll();
+      });
+      on('#mmExcelAgeMin', 'input', e => {
+        const v = parseInt(e.target.value, 10);
+        MMAT.excelAgeMin = isNaN(v) ? 0 : Math.max(0, Math.min(110, v));
+        mmRefreshOutput();
+      });
+      on('#mmExcelAgeMax', 'input', e => {
+        const v = parseInt(e.target.value, 10);
+        MMAT.excelAgeMax = isNaN(v) ? 74 : Math.max(0, Math.min(110, v));
+        mmRefreshOutput();
+      });
+      on('#mmExcelSexMode', 'change', e => {
+        MMAT.excelSexMode = e.target.value;
+        navKeepScroll();
+      });
+      on('#mmExcelAdvance', 'click', () => {
+        const ev = mmExcelValidation();
+        if(!ev.ok){
+          toast('Falta completar: ' + ev.missing.join(', '));
+          return;
+        }
+        MMAT.excelReady = true;
+        navKeepScroll();
+        const ex = $('#mmExportBtn');
+        if(ex) ex.scrollIntoView({ behavior:'smooth', block:'center' });
+      });
+    }
     on('#mmDefProjFree', 'input', e => { MMAT.defProj = e.target.value; mmRefreshOutput(); });
     on('#mmDefSecFree', 'input', e => { MMAT.defSector = e.target.value; mmRefreshOutput(); });
     const syncS = () => { MMAT.validSocios = new Set([...document.querySelectorAll('[data-mmsoc]')].filter(b => b.checked).map(b => b.value)); mmRefreshOutput(); };
