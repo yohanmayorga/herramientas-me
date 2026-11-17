@@ -17,23 +17,6 @@ function navSide(){
 
 function estadoChip(e){ return e==='disponible'?'<span class="chip-st ok">Disponible</span>':'<span class="chip-st dev">En desarrollo</span>'; }
 
-function viewPortada(){
-  return `<div class="portal">
-    <section class="p-hero">
-      <h1>Herramientas de Monitoreo y Evaluación</h1>
-      <p>Un solo lugar para las herramientas del área de M&amp;E de la OIM Venezuela: depuración de datos, tableros y conexiones a las fuentes de información.</p>
-    </section>
-    <h2 class="p-title">Secciones y herramientas</h2>
-    <div class="p-grid">${HERRAMIENTAS.map(h=>`<article class="p-card${h.estado==='disponible'?'':' dev'}">
-      <div class="p-ch"><span class="p-ic">${icono(h.icono,24)}</span>${estadoChip(h.estado)}</div>
-      <h3>${esc(h.nombre)}</h3><p class="muted">${esc(h.resumen)}</p>
-      <ul>${h.puntos.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
-      <div class="p-cf">${h.estado==='disponible'
-        ?`<a class="btn primary" href="#/${h.id}">Abrir ${icono('flecha',16)}</a>${(h.accesos||[]).length?`<div class="p-acc">${h.accesos.map(([l,u])=>`<a href="${u}">${esc(l)}</a>`).join('')}</div>`:''}`
-        :`<a class="btn" href="#/${h.id}">Ver detalles</a>`}</div>
-    </article>`).join('')}</div></div>`;
-}
-
 function viewSideNews(){
   return `<div class="side-h">Novedades</div>
     <ol class="p-news">${NOVEDADES.map(([f,t])=>`<li><span>${esc(f)}</span>${esc(t)}</li>`).join('')}</ol>`;
@@ -95,7 +78,8 @@ function navApply(){
   document.title=h?`${h.nombre} · Herramientas M&E`:'Herramientas M&E';
   if(enDep){ render(); return; }
   home.innerHTML=!h?viewPortada():h.vista?h.vista():viewProximamente(h);
-  if(h&&h.enlazar) h.enlazar();
+  if(!h&&typeof bindPortada==='function') bindPortada();
+  else if(h&&h.enlazar) h.enlazar();
   window.scrollTo(0,0);
 }
 

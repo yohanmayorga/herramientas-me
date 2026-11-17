@@ -8,8 +8,11 @@ const MMAT = {
   imsObj: null,  // objeto cargado (nfi/wash/sal/com)
   imsSector: '', // sector configurable para salud/mental/proteccion/psicosocial
   nfi: null,
-  raw: null,     // { headers, rows, sheet } para Kobo / Excel
+  raw: null,     // { headers, selectHeaders, rows, sheet, linkedInfo, sig } para Kobo / Excel
   map: {},       // mapeo de columnas para Kobo / Excel
+  manual: {},    // valores manuales fijos por campo cuando se elige '__manual__'
+  xlsform: null, // perfil del XLSForm cargado o recordado para Kobo
+  koboReady: false, // true cuando el usuario hace clic en Avanzar en Kobo
   defProj: 'DHR Emergencia',
   defProjOtro: '',
   defSector: 'NFI',
@@ -99,7 +102,331 @@ function mmParseRaw(wb, fileName){
     headers.forEach((hd, ci) => { o[hd] = r[ci] ?? null; });
     rows.push(o);
   }
-  return { name: fileName, sheet, headers, rows };
+  return { name: fileName, sheet, headers, selectHeaders: headers, rows, linkedInfo: null, sig: '' };
+}
+
+const KOBO_PREFS_KEY = 'herramientas_me_kobo_prefs_v1';
+const KOBO_XLSFORM_KEY = 'herramientas_me_kobo_xlsforms_v1';
+const KOBO_META_EXACT = new Set([
+  'start','end','today','deviceid','username','simserial','subscriberid','phonenumber','audit','mindate','0',
+  'instanceid','formhub/uuid','meta/instanceid','meta/rootuuid','_submission_meta/rootuuid',
+  '_id','_uuid','_submission_time','_validation_status','_notes','_status','_submitted_by','__version__','_tags',
+  '_index','repeat_pstion','_parent_table_name','_parent_index',
+  '_submission__id','_submission__uuid','_submission__submission_time','_submission__validation_status',
+  '_submission__notes','_submission__status','_submission__submitted_by','_submission__tags'
+]);
+const XLS_META_CALC_TYPES = new Set([
+  'start','end','today','deviceid','username','simserial','subscriberid','phonenumber','audit',
+  'calculate','hidden','note','begin_group','end_group','begin_repeat','end_repeat','begin group','end group','begin repeat','end repeat'
+]);
+
+function mmIsKoboMeta(h, xlsform){
+  const raw = String(h || '').trim();
+  const f = fold(raw);
+  if(!f) return true;
+  if(KOBO_META_EXACT.has(f) || raw.startsWith('_')) return true;
+  if(f.includes('meta/') || f.includes('formhub/') || f.includes('consentimiento informado') || f.includes('declaracion de privacidad')) return true;
+  if(raw.length > 110) return true;
+  if(/^(CALC_|TOTAL_|COUNT_|SUM_|MIN_|MAX_|FLAG_|AGE_GROUP|REPEAT_PSTION|MINDATE)/.test(raw.toUpperCase())) return true;
+  if(xlsform && xlsform.ignoreSet && xlsform.ignoreSet.includes(f)) return true;
+  return false;
+}
+
+function mmFilterKoboHeaders(headers, xlsform){
+  return (headers || []).filter(h => !mmIsKoboMeta(h, xlsform));
+}
+
+function mmLoadXlsForms(){
+  try{ return JSON.parse(localStorage.getItem(KOBO_XLSFORM_KEY) || '[]') || []; }catch{ return []; }
+}
+function mmSaveXlsFormProfile(prof){
+  if(!prof) return;
+  try{
+    const list = mmLoadXlsForms().filter(x => x.fileName !== prof.fileName);
+    list.unshift(prof);
+    localStorage.setItem(KOBO_XLSFORM_KEY, JSON.stringify(list.slice(0, 15)));
+  }catch{}
+}
+function mmFindMatchingXlsForm(headers){
+  const list = mmLoadXlsForms();
+  if(!list.length || !headers || !headers.length) return null;
+  const hSet = new Set(headers.map(h => fold(h)));
+  let best = null, bestScore = 0;
+  for(const xf of list){
+    let hits = 0;
+    (xf.qKeys || []).forEach(k => { if(hSet.has(k)) hits++; });
+    const score = xf.qKeys && xf.qKeys.length ? hits / xf.qKeys.length : 0;
+    if(hits >= 2 && score > bestScore){ best = xf; bestScore = score; }
+  }
+  return best;
+}
+
+function mmParseXlsForm(wb, fileName){
+  const sName = wb.SheetNames.find(n => fold(n) === 'survey');
+  if(!sName) throw new Error('El XLSForm debe contener una hoja llamada "survey".');
+  const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sName], { header:1, defval:null, raw:true, blankrows:false });
+  if(aoa.length < 2) throw new Error('La hoja "survey" del XLSForm está vacía.');
+  const hdrs = (aoa[0] || []).map(c => fold(toText(c)));
+  const iType = hdrs.findIndex(h => h === 'type' || h === 'tipo');
+  const iName = hdrs.findIndex(h => h === 'name' || h === 'nombre');
+  const labelCols = hdrs.map((h, i) => (h === 'label' || h.startsWith('label::') || h.startsWith('etiqueta')) ? i : -1).filter(i => i >= 0);
+  if(iType < 0 || iName < 0) throw new Error('La hoja "survey" debe tener columnas "type" y "name".');
+
+  const ignoreSet = new Set();
+  const qKeys = [];
+  let metaCount = 0, calcCount = 0, qCount = 0;
+
+  for(let r = 1; r < aoa.length; r++){
+    const row = aoa[r]; if(!row) continue;
+    const rawType = fold(toText(row[iType]));
+    const baseType = rawType.split(/\s+/)[0];
+    const name = toText(row[iName]);
+    const labels = labelCols.map(ci => toText(row[ci])).filter(Boolean);
+    if(!rawType && !name) continue;
+    if(XLS_META_CALC_TYPES.has(rawType) || XLS_META_CALC_TYPES.has(baseType)){
+      if(baseType === 'calculate') calcCount++; else metaCount++;
+      if(name) ignoreSet.add(fold(name));
+      labels.forEach(lb => ignoreSet.add(fold(lb)));
+    } else {
+      qCount++;
+      if(name) qKeys.push(fold(name));
+      labels.forEach(lb => qKeys.push(fold(lb)));
+    }
+  }
+  return {
+    fileName,
+    savedAt: new Date().toISOString().slice(0, 10),
+    qCount,
+    calcCount,
+    metaCount,
+    ignoreSet: [...ignoreSet],
+    qKeys: [...new Set(qKeys)].slice(0, 250)
+  };
+}
+
+const KOBO_ORG_MAP = {
+  crvz: 'Cruz Roja Maracaibo',
+  fpm: 'Fundación Proyecto Maniapure',
+  dsc: 'Diócesis de San Cristóbal',
+  cgdt: 'Cáritas Guasdualito',
+  odisef: 'ODISEF'
+};
+
+const KOBO_ESTADO_CODES = {
+  zul:'Zulia', bol:'Bolívar', tac:'Táchira', apu:'Apure', mir:'Miranda',
+  dca:'Distrito Capital', car:'Carabobo', ara:'Aragua', lar:'Lara', fal:'Falcón',
+  mer:'Mérida', tru:'Trujillo', bar:'Barinas', suc:'Sucre', anz:'Anzoátegui',
+  mon:'Monagas', del:'Delta Amacuro', ama:'Amazonas', yar:'Yaracuy', por:'Portuguesa',
+  coj:'Cojedes', gua:'Guárico', nue:'Nueva Esparta', lag:'La Guaira'
+};
+
+const KOBO_GEO_POINTS = [
+  { match: s => s.includes('terminal de pasajeros de maracaibo'), geo: { estado:'Zulia', mun:'Maracaibo', parr:'Chiquinquirá', com:'Terminal de Pasajeros de Maracaibo' } },
+  { match: s => s.includes('santa elena de uairen'), geo: { estado:'Bolívar', mun:'Gran Sabana', parr:'Gran Sabana', com:'Terminal de Pasajeros de Santa Elena de Uairén' } },
+  { match: s => s.includes('san antonio') && s.includes('esperanza'), geo: { estado:'Táchira', mun:'Bolívar', parr:'San Antonio del Táchira', com:'San Antonio "Esperanza Venezuela"' } },
+  { match: s => s.includes('urena') && s.includes('venezuela mia'), geo: { estado:'Táchira', mun:'Pedro María Ureña', parr:'Ureña', com:'Ureña "Venezuela Mía"' } },
+  { match: s => s.includes('capacho'), geo: { estado:'Táchira', mun:'Independencia', parr:'Capacho Nuevo', com:'Capacho' } },
+  { match: s => s.includes('la pedrera'), geo: { estado:'Táchira', mun:'Libertador', parr:'San Joaquín de Navay', com:'La Pedrera' } },
+  { match: s => s.includes('guasdualito'), geo: { estado:'Apure', mun:'Páez', parr:'Guasdualito', com:'Guasdualito "Jesus Maestro"' } }
+];
+
+const KOBO_GEO_TEAMS = [
+  { match: s => s.includes('cruz roja maracaibo') || s === 'crvz', geo: { estado:'Zulia', mun:'Maracaibo', parr:'', com:'' } },
+  { match: s => s.includes('maniapure') || s === 'fpm', geo: { estado:'Bolívar', mun:'Gran Sabana', parr:'Gran Sabana', com:'' } },
+  { match: s => s.includes('diocesis de san cristobal') || s === 'dsc', geo: { estado:'Táchira', mun:'', parr:'', com:'' } },
+  { match: s => s.includes('caritas guasdualito') || s === 'cgdt', geo: { estado:'Apure', mun:'Páez', parr:'Guasdualito', com:'' } },
+  { match: s => s.includes('odisef'), geo: { estado:'Táchira', mun:'Libertador', parr:'San Joaquín de Navay', com:'' } }
+];
+
+function mmKoboResolveGeo({ socio, punto, estadoRaw, munRaw, parrRaw, comRaw }){
+  let estado = toText(estadoRaw) || '', mun = toText(munRaw) || '', parr = toText(parrRaw) || '', com = toText(comRaw) || '';
+  const estCode = fold(estado);
+  if(KOBO_ESTADO_CODES[estCode]) estado = KOBO_ESTADO_CODES[estCode];
+  const fp = fold(punto || com);
+  const fs = fold(socio);
+  const ptHit = fp ? KOBO_GEO_POINTS.find(x => x.match(fp)) : null;
+  const tmHit = fs ? KOBO_GEO_TEAMS.find(x => x.match(fs)) : null;
+  const ref = ptHit ? ptHit.geo : (tmHit ? tmHit.geo : null);
+  if(ref){
+    if(!estado && ref.estado) estado = ref.estado;
+    if(!mun && ref.mun) mun = ref.mun;
+    if(!parr && ref.parr) parr = ref.parr;
+    if(!com && ref.com) com = ref.com;
+  }
+  if(!com && punto) com = toText(punto);
+  return { estado, mun, parr, com };
+}
+
+const MMAT_KOBO_FIELDS = [
+  { k:'fecha', l:'Fecha de atención / registro', aliases:['fecha','fecha de asistencia','fecha de entrega','assistance_date','date'] },
+  { k:'proyecto', l:'Proyecto', aliases:['project','proyecto','donante','programa'] },
+  { k:'socio', l:'Socio / Equipo implementador', aliases:['seleccione equipo implementador','equipo implementador','socio','socio implementador','org','organizacion','partner'] },
+  { k:'punto', l:'Punto específico / Sede (para ubicación)', aliases:['seleccione','punto de atencion','punto especifico','sede','ubicacion'] },
+  { k:'estado', l:'Estado', aliases:['estado','entidad federal','state'] },
+  { k:'municipio', l:'Municipio', aliases:['municipio','municipality'] },
+  { k:'parroquia', l:'Parroquia', aliases:['parroquia','parish'] },
+  { k:'comunidad', l:'Comunidad', aliases:['comunidad','community','sector o comunidad'] },
+  { k:'sector', l:'Sector / Tipo de asistencia', aliases:['sector','tipo de punto de atencion','seleccione la asistencia provista','tipo de asistencia','area'] },
+  { k:'caso', l:'Código de familia / caso (para recurrentes)', allowId:true, aliases:['_id','_submission__id','gdc_code','codigo de caso','codigo de familia','id familia','familia'] },
+  { k:'nombres', l:'Nombres (para inferir sexo si falta)', aliases:['nombres','nombre','primer nombre'] },
+  { k:'parentesco', l:'Parentesco (jefe de hogar / líder)', aliases:['parentesco','jefe de hogar','lider','relacion'] },
+  { k:'sexo', l:'Sexo', aliases:['cual es su sexo','sexo','sex','genero'] },
+  { k:'edad', l:'Edad (años cumplidos)', aliases:['cual es su edad','edad en anos','edad','age'] },
+  { k:'indig', l:'Población indígena', aliases:['comunidad indigena','poblacion indigena','indigena','etnia'] },
+  { k:'disc', l:'Personas con discapacidad', aliases:['discapacidad','personas con discapacidad'] },
+  { k:'preg', l:'Embarazada', aliases:['estado de embarazo','embarazo','embarazada'] },
+  { k:'lact', l:'En lactancia', aliases:['estado de lactancia','lactancia','lactante'] },
+  { k:'kits', l:'Total kits (si aplica)', aliases:['total kits','kits','cantidad de kits'] }
+];
+
+function mmLoadKoboPrefs(){
+  try{ return JSON.parse(localStorage.getItem(KOBO_PREFS_KEY) || '{}') || {}; }catch{ return {}; }
+}
+function mmSaveKoboPrefs(sig, map, manual){
+  if(!sig) return;
+  try{
+    const all = mmLoadKoboPrefs();
+    all[sig] = { map: { ...map }, manual: { ...manual } };
+    localStorage.setItem(KOBO_PREFS_KEY, JSON.stringify(all));
+  }catch{}
+}
+
+function mmKoboFieldHeaders(f, selectHeaders, allHeaders){
+  if(!f.allowId) return selectHeaders;
+  const extra = ['_id', '_submission__id'].filter(h => (allHeaders || []).includes(h) && !selectHeaders.includes(h));
+  return [...extra, ...selectHeaders];
+}
+
+function mmKoboAutoMap(selectHeaders, allHeaders, sig){
+  const map = {}, manual = {};
+  MMAT_KOBO_FIELDS.forEach(f => {
+    const pool = mmKoboFieldHeaders(f, selectHeaders, allHeaders);
+    let hit = pool.find(h => f.aliases.some(a => fold(h) === fold(a)));
+    if(!hit) hit = pool.find(h => f.aliases.some(a => fold(h).includes(fold(a))));
+    map[f.k] = hit || '';
+  });
+  const saved = sig ? mmLoadKoboPrefs()[sig] : null;
+  if(saved && saved.map){
+    MMAT_KOBO_FIELDS.forEach(f => {
+      const pool = mmKoboFieldHeaders(f, selectHeaders, allHeaders);
+      const sv = saved.map[f.k];
+      if(sv === '__manual__' || sv === '' || (sv && pool.includes(sv))) map[f.k] = sv;
+    });
+  }
+  if(saved && saved.manual) Object.assign(manual, saved.manual);
+  return { map, manual };
+}
+
+function mmInspectSheetMeta(ws){
+  const ref = ws && ws['!ref'];
+  if(!ref) return null;
+  const rg = XLSX.utils.decode_range(ref);
+  const topRg = { s: rg.s, e: { r: Math.min(rg.e.r, rg.s.r + 7), c: rg.e.c } };
+  const topAoa = XLSX.utils.sheet_to_json(ws, { header:1, defval:null, raw:true, blankrows:false, range: topRg });
+  if(!topAoa.length) return null;
+  const hIdx = detectHeaderRow(topAoa);
+  const seen = {};
+  const headers = (topAoa[hIdx] || []).map((c, i) => {
+    let n = toText(c) || `Columna ${i+1}`;
+    if(seen[n]){ seen[n]++; n = `${n} (${seen[n]})`; } else seen[n] = 1;
+    return n;
+  });
+  const estRows = Math.max(0, rg.e.r - (rg.s.r + hIdx));
+  return { rg, hIdx, headers, estRows };
+}
+
+function mmExtractSheetRows(ws, meta, keepSet){
+  const { rg, hIdx, headers } = meta;
+  const startR = rg.s.r + hIdx + 1;
+  if(startR > rg.e.r) return [];
+  const keepIdx = [];
+  headers.forEach((hd, ci) => { if(keepSet.has(hd)) keepIdx.push([ci, hd]); });
+  const dataRg = { s: { r: startR, c: rg.s.c }, e: rg.e };
+  const aoa = XLSX.utils.sheet_to_json(ws, { header:1, defval:null, raw:true, blankrows:false, range: dataRg });
+  const rows = [];
+  for(let i = 0; i < aoa.length; i++){
+    const r = aoa[i];
+    if(!r) continue;
+    let hasAny = false;
+    const o = { _row: startR + i + 1 };
+    for(let k = 0; k < keepIdx.length; k++){
+      const [ci, hd] = keepIdx[k];
+      const v = r[ci] ?? null;
+      if(v != null && String(v).trim() !== '') hasAny = true;
+      o[hd] = v;
+    }
+    if(hasAny) rows.push(o);
+  }
+  return rows;
+}
+
+function mmParseKobo(wb, fileName, explicitXls){
+  const metas = [];
+  for(const name of wb.SheetNames){
+    const m = mmInspectSheetMeta(wb.Sheets[name]);
+    if(m && m.estRows > 0) metas.push({ name, ws: wb.Sheets[name], ...m });
+  }
+  if(!metas.length) throw new Error('El archivo Kobo está vacío.');
+
+  const parentMeta = metas.find(s => s.headers.includes('_id') && !s.headers.includes('_submission__id')) || metas.find(s => s.headers.includes('_id'));
+  const childCandidates = metas.filter(s => s.headers.includes('_submission__id'));
+  const childMeta = childCandidates.find(s => /meal/i.test(s.name)) || childCandidates.sort((a, b) => b.estRows - a.estRows)[0];
+
+  if(parentMeta && childMeta && parentMeta !== childMeta){
+    const allHeaders = [...childMeta.headers];
+    parentMeta.headers.forEach(h => { if(!allHeaders.includes(h)) allHeaders.push(h); });
+    const xf = explicitXls || mmFindMatchingXlsForm(allHeaders);
+    const selectHeaders = mmFilterKoboHeaders(allHeaders, xf);
+    const keepSet = new Set([...selectHeaders, '_id', '_submission__id', '_index']);
+
+    const pRows = mmExtractSheetRows(parentMeta.ws, parentMeta, keepSet);
+    const cRows = mmExtractSheetRows(childMeta.ws, childMeta, keepSet);
+    const pKeepCols = parentMeta.headers.filter(h => keepSet.has(h) && h !== '_id');
+
+    const pById = new Map();
+    for(let i = 0; i < pRows.length; i++){
+      const pr = pRows[i];
+      const id = toText(pr._id);
+      if(id) pById.set(id, pr);
+    }
+
+    const rows = new Array(cRows.length);
+    for(let idx = 0; idx < cRows.length; idx++){
+      const cr = cRows[idx];
+      const subId = toText(cr._submission__id);
+      const pr = pById.get(subId);
+      cr._id = pr && pr._id != null ? pr._id : subId;
+      cr._row = cr._index != null ? Number(cr._index) || (idx + 2) : cr._row;
+      cr._koboSubId = subId;
+      if(pr){
+        for(let j = 0; j < pKeepCols.length; j++){
+          const h = pKeepCols[j];
+          if((cr[h] == null || String(cr[h]).trim() === '') && pr[h] != null) cr[h] = pr[h];
+        }
+      }
+      rows[idx] = cr;
+    }
+
+    const sig = selectHeaders.slice(0, 24).map(fold).join('|');
+    return {
+      name: fileName,
+      sheet: `${parentMeta.name} + ${childMeta.name}`,
+      headers: allHeaders,
+      selectHeaders,
+      rows,
+      sig,
+      xlsform: xf || null,
+      linkedInfo: { parentSheet: parentMeta.name, childSheet: childMeta.name, parentCount: pRows.length, childCount: cRows.length }
+    };
+  }
+
+  const main = metas.sort((a, b) => b.estRows - a.estRows)[0];
+  const xf = explicitXls || mmFindMatchingXlsForm(main.headers);
+  const selectHeaders = mmFilterKoboHeaders(main.headers, xf);
+  const keepSet = new Set([...selectHeaders, '_id', '_submission__id', '_index']);
+  const rows = mmExtractSheetRows(main.ws, main, keepSet);
+  const sig = selectHeaders.slice(0, 24).map(fold).join('|');
+  return { name: fileName, sheet: main.name, headers: main.headers, selectHeaders, rows, sig, xlsform: xf || null, linkedInfo: null };
 }
 
 const NAMES_M = new Set('marcos,darwin,carlos,jose,luis,juan,jesus,pedro,miguel,alexander,anderson,jefferson,emerson,yerson,brayan,bryan,kevin,anthony,yorman,wilmer,edwin,erwin,ender,douglas,franklin,richard,robert,ronald,hector,victor,oscar,daniel,gabriel,rafael,samuel,david,angel,manuel,antonio,francisco,javier,jorge,ramon,simon,eduardo,alejandro,andres,diego,sebastian,mateo,santiago,nicolas,cristian,christian,jonathan,jhon,jhonny,freddy,william,henry,omar,cesar,julio,raul,ruben,felipe,fernando,ricardo,gustavo,alberto,alfredo,arturo,enrique,ernesto,esteban,fabian,gerardo,guillermo,hernan,hugo,ignacio,ivan,jaime,joaquin,joel,leonardo,lorenzo,lucas,marcelo,mario,martin,mauricio,nelson,nestor,orlando,pablo,patricio,roberto,rodrigo,rogelio,sergio,tomas,ulises,vicente,walter,xavier,yohan,yonathan,joshua,luca,bautista,isaias,elias,matias,tobias,jeremias,zacarias,noah,alex,danny,dennis,edgar,efren,elvis,enmanuel,emmanuel,erick,eugenio,felix,francis,gregorio,israel,jairo,jorman,junior,kendry,kleiber,leandro,lenin,maikel,moises,neomar,orlando,oswaldo,reinaldo,rey,ronny,wilfredo,yeison,yender,yoel,yovanny,yovani'.split(','));
@@ -129,7 +456,14 @@ function mmImputePerson(p, a){
   const sxOk = sxRaw === 'mujer' || sxRaw === 'hombre';
   if(ageOk && sxOk) return { age: rawAge, sexo: sxRaw === 'mujer' ? 'Mujer' : 'Hombre', adj: null };
 
-  const seed = Math.abs((p.n || 1) * 31 + (a.num || 0) * 17 + (p.fam || 0) * 13);
+  const hashNum = v => {
+    if(typeof v === 'number' && !isNaN(v)) return v;
+    const s = String(v || '');
+    let h = 0;
+    for(let i = 0; i < s.length; i++) h = ((h * 31) + s.charCodeAt(i)) | 0;
+    return Math.abs(h);
+  };
+  const seed = Math.abs(hashNum(p.n || 1) * 31 + hashNum(a.num) * 17 + hashNum(p.fam) * 13);
   const rel = p.rel || '';
   const lead = (a.ps || []).find(x => isLeader(x) && x.birth && x.age != null && x.age >= 15 && x.age <= 100);
   const repAge = lead ? lead.age : 32;
@@ -249,12 +583,151 @@ function mmComputeGeneric(){
     ages.forEach((v, i) => { grp.ages[i] += v; });
   });
 
-  const outRows = [...grpMap.values()].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.proj.localeCompare(b.proj) || a.socio.localeCompare(b.socio) || a.estado.localeCompare(b.estado) || a.mun.localeCompare(b.mun) || a.parr.localeCompare(b.parr) || a.com.localeCompare(b.com) || a.sector.localeCompare(b.sector) || a.rec.localeCompare(b.rec));
+  const cmp = (x, y) => String(x || '').localeCompare(String(y || ''));
+  const outRows = [...grpMap.values()].sort((a, b) => cmp(a.fecha, b.fecha) || cmp(a.proj, b.proj) || cmp(a.socio, b.socio) || cmp(a.estado, b.estado) || cmp(a.mun, b.mun) || cmp(a.parr, b.parr) || cmp(a.com, b.com) || cmp(a.sector, b.sector) || cmp(a.rec, b.rec));
   const omitted = [];
   if(omitSocio) omitted.push(`${fmt(omitSocio)} registro(s) de socio(s) marcados como no válidos`);
   if(omitFecha) omitted.push(`${fmt(omitFecha)} registro(s) fuera del rango de fechas seleccionado`);
   if(omitEmpty) omitted.push(`${fmt(omitEmpty)} fila(s) sin personas ni kits registrados`);
   return { outRows, omitted, ajustes: [] };
+}
+
+function mmKoboVal(r, k){
+  const col = MMAT.map[k];
+  if(col === '__manual__') return MMAT.manual[k] || '';
+  return col ? r[col] : null;
+}
+
+function mmKoboNormSex(raw){
+  const f = fold(toText(raw));
+  if(!f) return '';
+  if(['mujer','femenino','f','female','nina','dama'].includes(f)) return 'Mujer';
+  if(['hombre','masculino','m','male','nino','caballero'].includes(f)) return 'Hombre';
+  return '';
+}
+
+function mmKoboFlag(v){
+  if(v == null) return 0;
+  const n = toNum(v);
+  if(n != null) return n > 0 ? 1 : 0;
+  const f = fold(toText(v));
+  if(!f) return 0;
+  if(['no','ninguno','ninguna','no aplica','na','n a','no sabe','prefiere no responder','0','false'].includes(f)) return 0;
+  return 1;
+}
+
+function mmComputeKobo(){
+  const R = MMAT.raw, M = MMAT.map;
+  if(!R) return null;
+  const defP = (MMAT.defProj || '').trim() || 'Sin proyecto';
+  const seenBySec = new Map(), grpMap = new Map(), ajustes = [];
+  let omitSocio = 0, omitFecha = 0;
+
+  const prepared = [];
+  R.rows.forEach((r, idx) => {
+    const fecha = M.fecha ? toDate(mmKoboVal(r, 'fecha')) : '';
+    let socio = toText(mmKoboVal(r, 'socio')) || '';
+    if(KOBO_ORG_MAP[fold(socio)]) socio = KOBO_ORG_MAP[fold(socio)];
+    if((M.socio === '__manual__' || M.socio) && MMAT.validSocios.size && !MMAT.validSocios.has(fold(socio || '(vacío)'))){ omitSocio++; return; }
+    if((MMAT.from || MMAT.to) && (!fecha || (MMAT.from && fecha < MMAT.from) || (MMAT.to && fecha > MMAT.to))){ omitFecha++; return; }
+
+    let projRaw = toText(mmKoboVal(r, 'proyecto'));
+    if(projRaw === '0') projRaw = '';
+    const proj = projRaw || defP;
+
+    let secRaw = toText(mmKoboVal(r, 'sector'));
+    if(secRaw === '0') secRaw = '';
+    const sector = secRaw || (MMAT.defSector || '').trim() || 'Sin sector';
+
+    const punto = toText(mmKoboVal(r, 'punto'));
+    const geo = mmKoboResolveGeo({
+      socio,
+      punto,
+      estadoRaw: mmKoboVal(r, 'estado'),
+      munRaw: mmKoboVal(r, 'municipio'),
+      parrRaw: mmKoboVal(r, 'parroquia'),
+      comRaw: mmKoboVal(r, 'comunidad')
+    });
+
+    const caso = toText(mmKoboVal(r, 'caso'));
+    const subKey = toText(r._koboSubId || r._submission__id || r._id) || caso || `row_${r._row || idx + 1}`;
+    const rawAge = toNum(mmKoboVal(r, 'edad'));
+    const age = rawAge != null && rawAge >= 0 && rawAge <= 110 ? Math.floor(rawAge) : null;
+    const sexo = mmKoboNormSex(mmKoboVal(r, 'sexo'));
+    const parentesco = toText(mmKoboVal(r, 'parentesco'));
+    const nombres = toText(mmKoboVal(r, 'nombres'));
+    const indig = mmKoboFlag(mmKoboVal(r, 'indig'));
+    const disc = mmKoboFlag(mmKoboVal(r, 'disc'));
+    const preg = (mmKoboFlag(mmKoboVal(r, 'preg')) || mmKoboFlag(mmKoboVal(r, 'lact'))) ? 1 : 0;
+    const kits = Math.max(0, toNum(mmKoboVal(r, 'kits')) || 0);
+
+    const p = {
+      n: r._row || (idx + 2),
+      fam: subKey,
+      birth: null,
+      age,
+      sexo,
+      rel: fold(parentesco),
+      parentesco,
+      name: nombres || `Persona ${r._row || idx + 1}`,
+      embarazo: preg ? 'Si' : '',
+      preg: preg ? 'Si' : ''
+    };
+    prepared.push({ r, fecha, proj, socio, geo, sector, caso, subKey, indig, disc, preg, kits, p });
+  });
+
+  // Agrupar por envío (_submission__id) para dar contexto de hogar/líder al imputar edad y sexo
+  const bySub = new Map();
+  prepared.forEach(item => {
+    let a = bySub.get(item.subKey);
+    if(!a){
+      a = { n: item.r._row, num: item.subKey, fecha: item.fecha, code: item.subKey, caso: item.caso, ps: [] };
+      bySub.set(item.subKey, a);
+    }
+    a.ps.push(item.p);
+  });
+
+  prepared.sort((a, b) => (a.fecha || '').localeCompare(b.fecha || '') || a.r._row - b.r._row);
+
+  prepared.forEach(item => {
+    const { fecha, proj, socio, geo, sector, caso, subKey, indig, disc, preg, kits, p } = item;
+    const a = bySub.get(subKey);
+    const imp = mmImputePerson(p, a);
+    if(imp.adj) ajustes.push(imp.adj);
+
+    let rec = 'NO';
+    if(caso){
+      if(!seenBySec.has(sector)) seenBySec.set(sector, new Set());
+      const s = seenBySec.get(sector), ck = fold(caso);
+      if(s.has(ck)) rec = 'SÍ'; else s.add(ck);
+    }
+
+    const ages = Array(18).fill(0);
+    const bi = MAT_BANDS.findIndex(([,, lo, hi]) => imp.age >= lo && imp.age <= hi);
+    if(bi >= 0) ages[bi * 2 + (imp.sexo === 'Mujer' ? 0 : 1)]++;
+
+    const k = [fecha || '', proj, socio, geo.estado, geo.mun, geo.parr, geo.com, sector, rec].join('|');
+    let grp = grpMap.get(k);
+    if(!grp){
+      grp = { fecha:fecha||'', proj, socio, estado:geo.estado, mun:geo.mun, parr:geo.parr, com:geo.com, sector, rec, indig:0, disc:0, preg:0, ages:Array(18).fill(0), kits:0 };
+      grpMap.set(k, grp);
+    }
+    grp.indig += indig; grp.disc += disc; grp.preg += preg; grp.kits += kits;
+    ages.forEach((v, i) => { grp.ages[i] += v; });
+  });
+
+  const cmp = (x, y) => String(x || '').localeCompare(String(y || ''));
+  const outRows = [...grpMap.values()].sort((a, b) => cmp(a.fecha, b.fecha) || cmp(a.proj, b.proj) || cmp(a.socio, b.socio) || cmp(a.estado, b.estado) || cmp(a.mun, b.mun) || cmp(a.parr, b.parr) || cmp(a.com, b.com) || cmp(a.sector, b.sector) || cmp(a.rec, b.rec));
+  const omitted = [];
+  if(omitSocio) omitted.push(`${fmt(omitSocio)} registro(s) de socio(s) marcados como no válidos`);
+  if(omitFecha) omitted.push(`${fmt(omitFecha)} registro(s) fuera del rango de fechas seleccionado`);
+  return { outRows, omitted, ajustes };
+}
+
+function mmComputeActive(){
+  if(MMAT.source === 'ims') return mmComputeIms();
+  if(MMAT.source === 'kobo') return mmComputeKobo();
+  return mmComputeGeneric();
 }
 
 function mmComputeIms(){
@@ -320,7 +793,8 @@ function mmComputeImsKits(N){
     });
   });
 
-  const outRows = [...grpMap.values()].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.proj.localeCompare(b.proj) || a.socio.localeCompare(b.socio) || a.estado.localeCompare(b.estado) || a.mun.localeCompare(b.mun) || a.parr.localeCompare(b.parr) || a.com.localeCompare(b.com) || a.sector.localeCompare(b.sector) || a.rec.localeCompare(b.rec));
+  const cmp = (x, y) => String(x || '').localeCompare(String(y || ''));
+  const outRows = [...grpMap.values()].sort((a, b) => cmp(a.fecha, b.fecha) || cmp(a.proj, b.proj) || cmp(a.socio, b.socio) || cmp(a.estado, b.estado) || cmp(a.mun, b.mun) || cmp(a.parr, b.parr) || cmp(a.com, b.com) || cmp(a.sector, b.sector) || cmp(a.rec, b.rec));
   const omitted = [];
   if(omitSocio) omitted.push(`${fmt(omitSocio)} registro(s) de socio(s) marcados como no válidos`);
   if(omitFecha) omitted.push(`${fmt(omitFecha)} registro(s) fuera del rango de fechas seleccionado`);
@@ -366,7 +840,8 @@ function mmComputeImsSal(t, A){
     if(t === 'proteccion') g.kits += (a.kitEcho || 0) + (a.kitUs || 0) + (a.kitDhr || 0);
   });
 
-  const outRows = [...grpMap.values()].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.proj.localeCompare(b.proj) || a.socio.localeCompare(b.socio) || a.estado.localeCompare(b.estado) || a.mun.localeCompare(b.mun) || a.parr.localeCompare(b.parr) || a.com.localeCompare(b.com) || a.sector.localeCompare(b.sector) || a.rec.localeCompare(b.rec));
+  const cmp = (x, y) => String(x || '').localeCompare(String(y || ''));
+  const outRows = [...grpMap.values()].sort((a, b) => cmp(a.fecha, b.fecha) || cmp(a.proj, b.proj) || cmp(a.socio, b.socio) || cmp(a.estado, b.estado) || cmp(a.mun, b.mun) || cmp(a.parr, b.parr) || cmp(a.com, b.com) || cmp(a.sector, b.sector) || cmp(a.rec, b.rec));
   const omitted = [];
   if(omitSocio) omitted.push(`${fmt(omitSocio)} registro(s) de socio(s) marcados como no válidos`);
   if(omitFecha) omitted.push(`${fmt(omitFecha)} registro(s) fuera del rango de fechas seleccionado`);
@@ -400,7 +875,8 @@ function mmComputeImsCom(C){
     g.ages[17] += a.hombres60 || 0; // Hombres 60+
   });
 
-  const outRows = [...grpMap.values()].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.proj.localeCompare(b.proj) || a.socio.localeCompare(b.socio) || a.estado.localeCompare(b.estado) || a.mun.localeCompare(b.mun) || a.parr.localeCompare(b.parr) || a.com.localeCompare(b.com) || a.sector.localeCompare(b.sector) || a.rec.localeCompare(b.rec));
+  const cmp = (x, y) => String(x || '').localeCompare(String(y || ''));
+  const outRows = [...grpMap.values()].sort((a, b) => cmp(a.fecha, b.fecha) || cmp(a.proj, b.proj) || cmp(a.socio, b.socio) || cmp(a.estado, b.estado) || cmp(a.mun, b.mun) || cmp(a.parr, b.parr) || cmp(a.com, b.com) || cmp(a.sector, b.sector) || cmp(a.rec, b.rec));
   const omitted = [];
   if(omitTipo) omitted.push(`${fmt(omitTipo)} actividad(es) de tipo excluido`);
   if(omitSocio) omitted.push(`${fmt(omitSocio)} actividad(es) de socio(s) marcados como no válidos`);
@@ -679,28 +1155,47 @@ function viewMatrizMonitoreo(){
         }
       }
     }
-  } else if(MMAT.raw){
-    const R = MMAT.raw, M = MMAT.map;
-    const opts = cur => `<option value="">— No aplica / usar defecto —</option>${R.headers.map(h => `<option value="${esc(h)}"${cur === h ? ' selected' : ''}>${esc(h)}</option>`).join('')}`;
-    body += `<h2>Mapeo de columnas (${esc(MMAT.source.toUpperCase())})</h2>
+  } else if(MMAT.raw && (MMAT.source !== 'kobo' || MMAT.koboReady)){
+    const R = MMAT.raw, M = MMAT.map, isKobo = MMAT.source === 'kobo';
+    const fields = isKobo ? MMAT_KOBO_FIELDS : MMAT_FIELDS;
+    const baseHdrs = isKobo ? (R.selectHeaders || R.headers) : R.headers;
+    const optsFor = (f, cur) => {
+      const hdrs = isKobo ? mmKoboFieldHeaders(f, baseHdrs, R.headers) : baseHdrs;
+      return `<option value="">— No aplica / usar defecto —</option><option value="__manual__"${cur === '__manual__' ? ' selected' : ''}>— Opción manual (valor fijo) —</option>${hdrs.map(h => `<option value="${esc(h)}"${cur === h ? ' selected' : ''}>${esc(h)}</option>`).join('')}`;
+    };
+    const linkMsg = R.linkedInfo
+      ? `Hojas vinculadas automáticamente: <b>${esc(R.linkedInfo.parentSheet)}</b> (${fmt(R.linkedInfo.parentCount)} envíos, <code>_id</code>) ↔ <b>${esc(R.linkedInfo.childSheet)}</b> (${fmt(R.linkedInfo.childCount)} individuos, <code>_submission__id</code>).`
+      : `Hoja leída: <b>${esc(R.sheet)}</b> · ${fmt(R.rows.length)} filas.`;
+    const xfMsg = isKobo && (MMAT.xlsform || R.xlsform)
+      ? ` XLSForm activo: <b>${esc((MMAT.xlsform || R.xlsform).fileName)}</b> (${fmt((MMAT.xlsform || R.xlsform).calcCount)} cálculos y ${fmt((MMAT.xlsform || R.xlsform).metaCount)} metadatos excluidos).`
+      : (isKobo ? ' Metadatos y cálculos de Kobo ocultos automáticamente.' : '');
+    const projSugs = [...new Set([
+      ...(typeof PROYECTOS !== 'undefined' && Array.isArray(PROYECTOS) ? PROYECTOS.map(p => p.n || p.nombre || p.codigo).filter(Boolean) : []),
+      ...MAT_PROJS.filter(p => p !== 'Otro')
+    ])];
+    const secSugs = ['Protección','Salud','SMAPS','WASH','NFI','Educación','Seguridad Alimentaria','Alojamiento'];
+    body += `<h2 id="mmKoboColsH">Confirmación de columnas (${esc(MMAT.source.toUpperCase())})</h2>
     <div class="panel">
-      <p class="muted" style="margin:0 0 10px;font-size:13.5px">Hoja leída: <b>${esc(R.sheet)}</b> · ${fmt(R.rows.length)} filas. Confirma las columnas detectadas automáticamente:</p>
+      <p class="muted" style="margin:0 0 10px;font-size:13.5px">${linkMsg}${xfMsg} Confirma cada columna o elige <b>Opción manual</b> para escribir un valor fijo:</p>
       <div class="grid2" style="gap:10px;margin-bottom:12px">
         <label class="pj-fg"><span class="pj-fl">Proyecto por defecto (si falta columna)</span>
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <select class="in" id="mmDefProj">${MAT_PROJS.map(p => `<option ${MMAT.defProj === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
-            <input type="text" class="in" id="mmDefProjOtro" value="${esc(MMAT.defProjOtro)}" placeholder="Escribir proyecto…" style="min-width:140px;${MMAT.defProj === 'Otro' ? '' : 'display:none'}">
-          </div>
+          <input type="text" class="in" id="mmDefProjFree" list="mmProjDatalist" value="${esc(MMAT.defProj)}" placeholder="Escribir nombre o código del proyecto…">
+          <datalist id="mmProjDatalist">${projSugs.map(p => `<option value="${esc(p)}">`).join('')}</datalist>
         </label>
         <label class="pj-fg"><span class="pj-fl">Sector por defecto (si falta columna)</span>
-          <select class="in" id="mmDefSec">${['NFI','WASH'].map(c => `<option ${MMAT.defSector === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
+          <input type="text" class="in" id="mmDefSecFree" list="mmSecDatalist" value="${esc(MMAT.defSector)}" placeholder="Ej. Protección, Salud, WASH, NFI…">
+          <datalist id="mmSecDatalist">${secSugs.map(s => `<option value="${esc(s)}">`).join('')}</datalist>
         </label>
       </div>
-      <div class="scroll"><table class="ledger"><thead><tr><th>Campo de la Matriz</th><th>Columna en el archivo</th></tr></thead><tbody>
-        ${MMAT_FIELDS.map(f => `<tr><td>${esc(f.l)}</td><td><select class="in" data-mmap="${f.k}">${opts(M[f.k])}</select></td></tr>`).join('')}
+      <div class="scroll"><table class="ledger"><thead><tr><th>Campo de la Matriz</th><th>Columna en el archivo / Opción manual</th></tr></thead><tbody>
+        ${fields.map(f => {
+          const cur = M[f.k] || '';
+          const manVal = MMAT.manual[f.k] || '';
+          return `<tr><td>${esc(f.l)}</td><td><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><select class="in" data-mmap="${f.k}" style="flex:1;min-width:200px">${optsFor(f, cur)}</select><input type="text" class="in" data-mmanual="${f.k}" value="${esc(manVal)}" placeholder="Valor fijo para todas las filas…" style="flex:1;min-width:170px;${cur === '__manual__' ? '' : 'display:none'}"></div></td></tr>`;
+        }).join('')}
       </tbody></table></div>
     </div>`;
-    if(M.socio && MMAT.socioList.length){
+    if(M.socio && M.socio !== '__manual__' && MMAT.socioList.length){
       body += `<h2>Socios implementadores válidos</h2><div class="panel">
         <div class="row" style="margin:0 0 6px"><button class="btn sm" type="button" id="mmSocAll">Seleccionar todos</button><button class="btn sm" type="button" id="mmSocNone">Quitar todos</button></div>
         ${MMAT.socioList.map(([x, c]) => `<label class="check"><input type="checkbox" data-mmsoc value="${esc(fold(x))}" ${MMAT.validSocios.has(fold(x)) ? 'checked' : ''}> ${esc(x)} <span class="muted">(${fmt(c)} registros)</span></label>`).join('')}
@@ -708,10 +1203,9 @@ function viewMatrizMonitoreo(){
     }
   }
 
-  const res = MMAT.source === 'ims' ? mmComputeIms() : mmComputeGeneric();
+  const res = (MMAT.source === 'kobo' && !MMAT.koboReady) ? null : mmComputeActive();
   const hasOutput = res && res.outRows.length > 0;
-  const summary = hasOutput ? mmBuildSummary(res) : { html:'', plain:'' };
-  const hasAdj = MMAT.source === 'ims' && res && res.ajustes && res.ajustes.length > 0;
+  const hasAdj = (MMAT.source === 'ims' || MMAT.source === 'kobo') && res && res.ajustes && res.ajustes.length > 0;
 
   let exportHtml = '';
   if(res){
@@ -727,23 +1221,34 @@ function viewMatrizMonitoreo(){
     <div class="exp" style="margin-top:12px">
       <h3>Matriz de monitoreo</h3>
       <p class="muted">${hasOutput ? `${fmt(res.outRows.length)} fila(s) listas para exportar en el formato oficial de la Matriz de monitoreo.` : 'No hay filas válidas con los filtros y socios seleccionados.'}</p>
-      <div id="mmSummaryBox" style="margin:12px 0;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);font-size:13.5px;line-height:1.5;${summary.html ? '' : 'display:none'}">
-        <div style="font-weight:600;margin-bottom:8px;color:var(--accent)">Resumen para correo / reporte</div>
-        <div id="mmSummaryTxt">${summary.html}</div>
-      </div>
       <div class="row" style="gap:10px;flex-wrap:wrap">
         <button class="btn primary" type="button" id="mmExportBtn" ${hasOutput ? '' : 'disabled'}>Descargar Excel</button>
-        ${MMAT.source === 'ims' ? `<button class="btn" type="button" id="mmExportAdj" ${hasAdj ? '' : 'disabled'}>Descargar ajustes${res.ajustes ? ` (${fmt(res.ajustes.length)})` : ''}</button>` : ''}
-        <button class="btn" type="button" id="mmCopySummary" ${summary.plain ? '' : 'disabled'}>Copiar resumen</button>
+        ${(MMAT.source === 'ims' || MMAT.source === 'kobo') ? `<button class="btn" type="button" id="mmExportAdj" ${hasAdj ? '' : 'disabled'}>Descargar ajustes${res.ajustes ? ` (${fmt(res.ajustes.length)})` : ''}</button>` : ''}
       </div>
     </div>`;
   }
+
+  const koboXlsHtml = MMAT.source === 'kobo' ? (() => {
+    const xf = MMAT.xlsform || (MMAT.raw && MMAT.raw.xlsform) || null;
+    const canAdv = !!(MMAT.file && MMAT.wb);
+    return `<h2>2b. XLSForm del formulario (opcional, se guarda en memoria)</h2>
+    <div class="drop" id="mmXlsDrop" tabindex="0" role="button" style="margin-bottom:12px;padding:16px">
+      <strong>${xf ? esc(xf.fileName) : 'Arrastra aquí el XLSForm de Kobo o haz clic para seleccionarlo'}</strong>
+      <span>${xf ? `Activo (${fmt(xf.qCount)} preguntas, ${fmt(xf.calcCount)} cálculos y ${fmt(xf.metaCount)} metadatos excluidos). Haz clic o arrastra para reemplazar.` : 'Opcional: ayuda al sistema a identificar preguntas y ocultar cálculos/metadatos antes de avanzar (.xlsx, .xls)'}</span>
+    </div>
+    <input type="file" id="mmXlsIn" accept=".xlsx,.xls" hidden>
+    <div class="row" style="gap:10px;margin-bottom:18px;align-items:center;flex-wrap:wrap">
+      <button class="btn primary" type="button" id="mmKoboAdvance" ${canAdv ? '' : 'disabled'}>${MMAT.koboReady ? 'Volver a analizar columnas' : 'Avanzar y analizar columnas →'}</button>
+      ${xf ? `<button class="btn sm" type="button" id="mmXlsClear">Quitar XLSForm</button>` : ''}
+      ${!canAdv ? `<span class="muted" style="font-size:12.5px">Carga primero el archivo de datos de Kobo para poder avanzar.</span>` : ''}
+    </div>`;
+  })() : '';
 
   return `<div class="portal">
     <section class="p-hero pj-hero">
       <div>
         <h1>Matriz de monitoreo</h1>
-        <p>Genera el Excel de la Matriz de monitoreo y el resumen ejecutivo para correo o reporte a partir de descargas del IMS, KoboToolbox o archivos Excel.</p>
+        <p>Genera el Excel de la Matriz de monitoreo a partir de descargas del IMS, KoboToolbox o archivos Excel.</p>
       </div>
     </section>
 
@@ -751,28 +1256,23 @@ function viewMatrizMonitoreo(){
     <div class="p-grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin-bottom:18px">${srcCards}</div>
 
     <h2>2. Cargar archivo (${esc(srcInfo.name)})</h2>
-    <div class="drop" id="mmFileDrop" tabindex="0" role="button" style="margin-bottom:16px">
+    <div class="drop" id="mmFileDrop" tabindex="0" role="button" style="margin-bottom:12px">
       <strong>${MMAT.file ? esc(MMAT.file.name) : `Arrastra aquí el archivo de ${esc(srcInfo.name)} o haz clic para seleccionarlo`}</strong>
       <span>${MMAT.file ? 'Haz clic para reemplazar el archivo cargado' : 'Formatos compatibles: .xlsx, .xls, .csv'}</span>
     </div>
     <input type="file" id="mmFileIn" accept=".xlsx,.xls,.xlsm,.csv" hidden>
+    ${koboXlsHtml}
 
     ${body}
     ${exportHtml}
   </div>`;
 }
 
-let mmLastSummaryPlain = '';
 function mmRefreshOutput(){
-  const res = MMAT.source === 'ims' ? mmComputeIms() : mmComputeGeneric();
+  const res = (MMAT.source === 'kobo' && !MMAT.koboReady) ? null : mmComputeActive();
   const hasOutput = res && res.outRows.length > 0;
-  const summary = hasOutput ? mmBuildSummary(res) : { html:'', plain:'' };
-  mmLastSummaryPlain = summary.plain;
-  const box = $('#mmSummaryBox'), tEl = $('#mmSummaryTxt'), exBtn = $('#mmExportBtn'), cpBtn = $('#mmCopySummary'), adjBtn = $('#mmExportAdj');
-  if(tEl) tEl.innerHTML = summary.html;
-  if(box) box.style.display = summary.html ? '' : 'none';
+  const exBtn = $('#mmExportBtn'), adjBtn = $('#mmExportAdj');
   if(exBtn) exBtn.disabled = !hasOutput;
-  if(cpBtn) cpBtn.disabled = !summary.plain;
   if(adjBtn && res && res.ajustes){
     adjBtn.disabled = !res.ajustes.length;
     adjBtn.textContent = `Descargar ajustes (${fmt(res.ajustes.length)})`;
@@ -804,17 +1304,36 @@ async function mmLoadMainFile(f){
   busy(true); await nextFrame();
   try{
     const buf = await f.arrayBuffer();
-    const wb = XLSX.read(buf, { type:'array', cellDates:true });
+    const readOpts = MMAT.source === 'kobo'
+      ? { type:'array', cellDates:true, cellStyles:false, cellHTML:false, cellFormula:false, cellNF:false }
+      : { type:'array', cellDates:true };
+    const wb = XLSX.read(buf, readOpts);
     MMAT.file = f; MMAT.wb = wb; MMAT.imsObj = null; MMAT.raw = null;
     if(MMAT.source === 'ims'){
       const det = detectForm(wb);
       MMAT.imsDet = det;
       const initType = IMS_FORM_OPTS.some(([v]) => v === det) ? det : 'nfi';
       mmApplyImsType(initType);
+    } else if(MMAT.source === 'kobo'){
+      MMAT.koboReady = false;
+      MMAT.defProj = '';
+      MMAT.defSector = '';
+      if(!MMAT.xlsform){
+        const hdrs = [];
+        for(const sn of wb.SheetNames){
+          const m = mmInspectSheetMeta(wb.Sheets[sn]);
+          if(m && m.headers) m.headers.forEach(h => hdrs.push(h));
+        }
+        const matched = mmFindMatchingXlsForm(hdrs);
+        if(matched) MMAT.xlsform = matched;
+      }
     } else {
+      MMAT.defProj = '';
+      MMAT.defSector = '';
       const raw = mmParseRaw(wb, f.name);
       MMAT.raw = raw;
       MMAT.map = mmAutoMap(raw.headers);
+      MMAT.manual = {};
       mmSyncRawMeta();
     }
   }catch(e){
@@ -829,13 +1348,17 @@ async function mmLoadMainFile(f){
 function mmSyncRawMeta(){
   const R = MMAT.raw, M = MMAT.map;
   if(!R) return;
-  if(M.socio){
-    MMAT.socioList = countBy(R.rows, r => toText(r[M.socio]) || '(vacío)');
+  if(M.socio && M.socio !== '__manual__'){
+    MMAT.socioList = countBy(R.rows, r => {
+      let s = toText(r[M.socio]) || '';
+      if(MMAT.source === 'kobo' && KOBO_ORG_MAP[fold(s)]) s = KOBO_ORG_MAP[fold(s)];
+      return s || '(vacío)';
+    });
     MMAT.validSocios = new Set(MMAT.socioList.map(([s]) => fold(s)));
   } else {
     MMAT.socioList = []; MMAT.validSocios = new Set();
   }
-  if(M.fecha){
+  if(M.fecha && M.fecha !== '__manual__'){
     const ds = R.rows.map(r => toDate(r[M.fecha])).filter(Boolean).sort();
     MMAT.minDate = ds[0] || ''; MMAT.maxDate = ds[ds.length - 1] || '';
     MMAT.from = MMAT.minDate; MMAT.to = MMAT.maxDate;
@@ -849,6 +1372,9 @@ function bindMatrizMonitoreo(){
   document.querySelectorAll('[data-msrc]').forEach(b => b.onclick = () => {
     MMAT.source = b.dataset.msrc;
     MMAT.file = null; MMAT.wb = null; MMAT.imsType = ''; MMAT.imsDet = ''; MMAT.imsObj = null; MMAT.raw = null;
+    MMAT.koboReady = false;
+    MMAT.defProj = MMAT.source === 'ims' ? 'DHR Emergencia' : '';
+    MMAT.defSector = MMAT.source === 'ims' ? 'NFI' : '';
     navApply();
   });
 
@@ -862,6 +1388,48 @@ function bindMatrizMonitoreo(){
     d.ondrop = e => { e.preventDefault(); d.classList.remove('over'); if(e.dataTransfer.files[0]) handler(e.dataTransfer.files[0]); };
     inp.onchange = e => { if(e.target.files[0]) handler(e.target.files[0]); e.target.value = ''; };
   };
+
+  if(MMAT.source === 'kobo'){
+    const loadXls = async f => {
+      busy(true); await nextFrame();
+      try{
+        const buf = await f.arrayBuffer();
+        const wb = XLSX.read(buf, { type:'array' });
+        const prof = mmParseXlsForm(wb, f.name);
+        MMAT.xlsform = prof;
+        mmSaveXlsFormProfile(prof);
+        toast(`XLSForm cargado (${prof.qCount} preguntas, ${prof.calcCount} cálculos excluidos)`);
+      }catch(err){ console.error(err); toast('No se pudo leer el XLSForm: ' + (err.message || err)); }
+      finally{ busy(false); navApply(); }
+    };
+    bindDrop('#mmXlsDrop', '#mmXlsIn', loadXls);
+    on('#mmXlsClear', 'click', () => {
+      MMAT.xlsform = null;
+      if(MMAT.raw){
+        MMAT.raw.xlsform = null;
+        MMAT.raw.selectHeaders = mmFilterKoboHeaders(MMAT.raw.headers, null);
+      }
+      navApply();
+    });
+    on('#mmKoboAdvance', 'click', async () => {
+      if(!MMAT.wb || !MMAT.file){ toast('Carga primero el archivo de datos de Kobo.'); return; }
+      busy(true); await nextFrame();
+      try{
+        const raw = mmParseKobo(MMAT.wb, MMAT.file.name, MMAT.xlsform);
+        MMAT.raw = raw;
+        if(raw.xlsform && !MMAT.xlsform) MMAT.xlsform = raw.xlsform;
+        const auto = mmKoboAutoMap(raw.selectHeaders, raw.headers, raw.sig);
+        MMAT.map = auto.map;
+        MMAT.manual = auto.manual;
+        MMAT.koboReady = true;
+        mmSyncRawMeta();
+        navApply();
+        const el = $('#mmKoboColsH');
+        if(el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+      }catch(err){ console.error(err); toast('No se pudo analizar el archivo Kobo: ' + (err.message || err)); }
+      finally{ busy(false); }
+    });
+  }
 
   bindDrop('#mmFileDrop', '#mmFileIn', mmLoadMainFile);
   on('#mmImsType', 'change', e => { mmApplyImsType(e.target.value); navApply(); });
@@ -925,19 +1493,27 @@ function bindMatrizMonitoreo(){
       on('#mmSocAll', 'click', () => { document.querySelectorAll('[data-mmsoc]').forEach(b => b.checked = true); syncS(); });
       on('#mmSocNone', 'click', () => { document.querySelectorAll('[data-mmsoc]').forEach(b => b.checked = false); syncS(); });
     }
-  } else if(MMAT.raw){
+  } else if(MMAT.raw && (MMAT.source !== 'kobo' || MMAT.koboReady)){
     document.querySelectorAll('[data-mmap]').forEach(sel => sel.onchange = () => {
-      MMAT.map[sel.dataset.mmap] = sel.value;
-      if(sel.dataset.mmap === 'socio' || sel.dataset.mmap === 'fecha'){ mmSyncRawMeta(); navApply(); }
+      const k = sel.dataset.mmap;
+      MMAT.map[k] = sel.value;
+      const manInp = document.querySelector(`[data-mmanual="${k}"]`);
+      if(manInp){
+        manInp.style.display = sel.value === '__manual__' ? '' : 'none';
+        if(sel.value === '__manual__') manInp.focus();
+      }
+      if(MMAT.source === 'kobo' && MMAT.raw.sig) mmSaveKoboPrefs(MMAT.raw.sig, MMAT.map, MMAT.manual);
+      if(k === 'socio' || k === 'fecha'){ mmSyncRawMeta(); navApply(); }
       else mmRefreshOutput();
     });
-    on('#mmDefProj', 'change', e => {
-      MMAT.defProj = e.target.value;
-      const inp = $('#mmDefProjOtro'); if(inp) inp.style.display = e.target.value === 'Otro' ? '' : 'none';
+    document.querySelectorAll('[data-mmanual]').forEach(inp => inp.oninput = () => {
+      const k = inp.dataset.mmanual;
+      MMAT.manual[k] = inp.value;
+      if(MMAT.source === 'kobo' && MMAT.raw.sig) mmSaveKoboPrefs(MMAT.raw.sig, MMAT.map, MMAT.manual);
       mmRefreshOutput();
     });
-    on('#mmDefProjOtro', 'input', e => { MMAT.defProjOtro = e.target.value; mmRefreshOutput(); });
-    on('#mmDefSec', 'change', e => { MMAT.defSector = e.target.value; mmRefreshOutput(); });
+    on('#mmDefProjFree', 'input', e => { MMAT.defProj = e.target.value; mmRefreshOutput(); });
+    on('#mmDefSecFree', 'input', e => { MMAT.defSector = e.target.value; mmRefreshOutput(); });
     const syncS = () => { MMAT.validSocios = new Set([...document.querySelectorAll('[data-mmsoc]')].filter(b => b.checked).map(b => b.value)); mmRefreshOutput(); };
     document.querySelectorAll('[data-mmsoc]').forEach(b => b.onchange = syncS);
     on('#mmSocAll', 'click', () => { document.querySelectorAll('[data-mmsoc]').forEach(b => b.checked = true); syncS(); });
@@ -971,7 +1547,7 @@ function bindMatrizMonitoreo(){
   on('#mmExportBtn', 'click', async () => {
     busy(true); await nextFrame();
     try{
-      const res = MMAT.source === 'ims' ? mmComputeIms() : mmComputeGeneric();
+      const res = (MMAT.source === 'kobo' && !MMAT.koboReady) ? null : mmComputeActive();
       await mmExportMatrizExcel(res);
     }catch(e){ console.error(e); toast('Error al exportar: ' + (e.message || e)); }
     finally{ busy(false); }
@@ -979,15 +1555,9 @@ function bindMatrizMonitoreo(){
   on('#mmExportAdj', 'click', async () => {
     busy(true); await nextFrame();
     try{
-      const res = mmComputeIms();
+      const res = (MMAT.source === 'kobo' && !MMAT.koboReady) ? null : mmComputeActive();
       await mmExportAjustesExcel(res);
     }catch(e){ console.error(e); toast('Error al exportar ajustes: ' + (e.message || e)); }
     finally{ busy(false); }
-  });
-  on('#mmCopySummary', 'click', () => {
-    const res = MMAT.source === 'ims' ? mmComputeIms() : mmComputeGeneric();
-    const txt = mmLastSummaryPlain || (res ? mmBuildSummary(res).plain : '');
-    if(!txt) return;
-    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(() => toast('Resumen copiado al portapapeles'));
   });
 }
