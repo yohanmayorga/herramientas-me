@@ -1,6 +1,7 @@
 /* Herramientas M&E · Novedades de la portada y arranque de la aplicación.
    Agrega cada mejora nueva al inicio de NOVEDADES (la más reciente primero). */
 const NOVEDADES=[
+  ['Noviembre 2026','Reportes · Matriz de monitoreo: imputación jerárquica de Estado, Municipio, Parroquia y Comunidad según mismo socio y fecha más cercana (sombreado en amarillo pastel al rellenar y rojo pastel si queda vacío).'],
   ['Noviembre 2026','Depurador IMS: nueva exportación «Matriz de monitoreo» para entregas de kits NFI, con fecha en la primera columna, selección de Proyecto (ECHO ALERT, DHR Emergencia u Otro) y Tipo (NFI o WASH) por kit, omisión de socios marcados como errados, desagregación geográfica, separación de recurrentes (SI/NO) y cruce por edad, sexo y condiciones específicas.'],
   ['Noviembre 2026','Depurador IMS: optimización de la pestaña «Atenciones» del SITREP (agregación diaria y bloques contiguos sin COUNTIFS acumulativos) para que el Excel abra de forma instantánea con más de 100 000 registros.'],
   ['Noviembre 2026','Depurador IMS: incorporación en el Excel del SITREP de la pestaña consolidada «Kits» (NFI y WASH) y de un cuadro de kits entregados en la pestaña principal con filtros dinámicos por tipo de kit y rango de fechas.'],

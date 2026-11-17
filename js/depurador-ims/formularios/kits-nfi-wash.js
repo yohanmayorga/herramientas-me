@@ -226,15 +226,16 @@ async function nfiExportMatriz(){
       };
       if(psNo.length){
         addBucket('NO',psNo,q);
-        if(psSi.length) addBucket('SI',psSi,0);
+        if(psSi.length) addBucket('SÍ',psSi,0);
       } else if(psSi.length){
-        addBucket('SI',psSi,q);
+        addBucket('SÍ',psSi,q);
       } else {
         addBucket('NO',[],q);
       }
     });
   });
   const outRows=[...grpMap.values()].sort((a,b)=>a.fecha.localeCompare(b.fecha)||a.proj.localeCompare(b.proj)||a.socio.localeCompare(b.socio)||a.estado.localeCompare(b.estado)||a.mun.localeCompare(b.mun)||a.parr.localeCompare(b.parr)||a.com.localeCompare(b.com)||a.sector.localeCompare(b.sector)||a.rec.localeCompare(b.rec));
+  if(typeof mmFillGeo==='function') mmFillGeo(outRows);
   const headers=[
     'FECHA','PROYECTO','SOCIO','ESTADO','MUNICIPIO','PARROQUIA','COMUNIDAD','SECTOR',
     'NOMBRE DE LA ACTIVIDAD','INDICADOR 345W','INDICADOR DE CONVENIO','INDICADOR DEL PROYECTO',
@@ -243,7 +244,6 @@ async function nfiExportMatriz(){
     ...MAT_BANDS.flatMap(([f,m])=>[f,m]),
     'TOTAL PERSONAS','TOTAL SERVICIOS','TOTAL KITS'
   ];
-  const subRow=Array(headers.length).fill(''); subRow[15]='SI/NO';
   const matDate=ymdStr=>{
     if(!ymdStr||!/^\d{4}-\d{2}-\d{2}$/.test(ymdStr)) return null;
     const [y,m,d]=ymdStr.split('-').map(Number);
@@ -251,16 +251,14 @@ async function nfiExportMatriz(){
   };
   const fname=`Matriz_Monitoreo_NFI${tag}.xlsx`;
   if(window.ExcelJS){
-    const wb=new ExcelJS.Workbook(), ws=wb.addWorksheet('Matriz de monitoreo',{views:[{state:'frozen',ySplit:2}]});
+    const wb=new ExcelJS.Workbook(), ws=wb.addWorksheet('Matriz de monitoreo',{views:[{state:'frozen',ySplit:1}]});
     const thin={style:'thin',color:{argb:'FFCBD5E1'}}, box={top:thin,left:thin,bottom:thin,right:thin};
     ws.columns=headers.map((h,i)=>({width:i===0?14:i<8?18:i<12?22:i<17?16:i<35?14:15}));
     const r1=ws.getRow(1);
     headers.forEach((h,i)=>{ const c=r1.getCell(i+1); c.value=h; c.font={bold:true,color:{argb:'FFFFFFFF'},size:10}; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0033A0'}}; c.alignment={horizontal:'center',vertical:'middle',wrapText:true}; c.border=box; });
     r1.height=34;
-    const r2=ws.getRow(2);
-    subRow.forEach((v,i)=>{ const c=r2.getCell(i+1); c.value=v||null; c.font={bold:true,size:9,color:{argb:'FF475569'}}; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE2E8F0'}}; c.alignment={horizontal:'center'}; c.border=box; });
     outRows.forEach((g,idx)=>{
-      const rIdx=3+idx, r=ws.getRow(rIdx), totPers=g.ages.reduce((s,v)=>s+v,0);
+      const rIdx=2+idx, r=ws.getRow(rIdx), totPers=g.ages.reduce((s,v)=>s+v,0);
       const vals=[
         matDate(g.fecha),g.proj,g.socio,g.estado,g.mun,g.parr,g.com,g.sector,
         null,null,null,null,
@@ -271,16 +269,21 @@ async function nfiExportMatriz(){
       vals.forEach((v,ci)=>{
         const c=r.getCell(ci+1); c.value=v; c.border=box;
         if(ci===0){ c.numFmt='dd/mm/yyyy'; c.alignment={horizontal:'center'}; }
+        if(ci>=3&&ci<=6&&g._geo){
+          const gk=['estado','mun','parr','com'][ci-3], st=g._geo[gk];
+          if(st==='imp') c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFF6CC'}};
+          else if(st==='miss'){ c.value=null; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFDE2E2'}}; }
+        }
         if(ci>=12&&ci!==15&&ci!==16&&ci!==36){ c.numFmt='#,##0'; }
         if(ci===15) c.alignment={horizontal:'center'};
       });
     });
-    ws.autoFilter={from:{row:1,column:1},to:{row:Math.max(2,outRows.length+2),column:headers.length}};
+    ws.autoFilter={from:{row:1,column:1},to:{row:Math.max(1,outRows.length+1),column:headers.length}};
     const buf=await wb.xlsx.writeBuffer();
     await saveFile(fname,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})); return;
   }
   const wb=XLSX.utils.book_new();
-  const aoa=[headers,subRow,...outRows.map(g=>[g.fecha||null,g.proj,g.socio,g.estado,g.mun,g.parr,g.com,g.sector,null,null,null,null,g.indig,g.disc,g.preg,g.rec,null,...g.ages,g.ages.reduce((s,v)=>s+v,0),null,g.kits])];
+  const aoa=[headers,...outRows.map(g=>[g.fecha||null,g.proj,g.socio,g.estado,g.mun,g.parr,g.com,g.sector,null,null,null,null,g.indig,g.disc,g.preg,g.rec,null,...g.ages,g.ages.reduce((s,v)=>s+v,0),null,g.kits])];
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoa),'Matriz de monitoreo');
   await saveFile(fname,xlsxBlob(wb));
 }

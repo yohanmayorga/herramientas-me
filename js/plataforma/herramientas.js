@@ -9,6 +9,7 @@ const ICONOS={
   depurador:'<path d="M4 4h16l-6 8v6l-4 2v-8z"/>',
   tableros:'<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
   formularios:'<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/>',
+  matriz:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16M15 4v16"/>',
   apis:'<path d="M9 7V3M15 7V3"/><path d="M6 7h12v4a6 6 0 0 1-12 0z"/><path d="M12 17v4"/>',
   menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
   contraer:'<path d="M15 6l-6 6 6 6"/>',
@@ -40,5 +41,9 @@ const HERRAMIENTAS=[
     vista:viewFormularios, enlazar:bindFormularios },
   { id:'apis', nombre:'Enlaces de API', icono:'apis', estado:'desarrollo', grupo:'Herramientas',
     resumen:'Directorio de conexiones a fuentes de datos (por ejemplo, KoboToolbox) para Power BI y Power Query.',
-    puntos:['Enlaces de exportación por formulario y proyecto','Instrucciones de conexión desde Power BI','Sin credenciales: los tokens nunca se guardan en la herramienta'] }
+    puntos:['Enlaces de exportación por formulario y proyecto','Instrucciones de conexión desde Power BI','Sin credenciales: los tokens nunca se guardan en la herramienta'] },
+  { id:'matriz-monitoreo', nombre:'Matriz de monitoreo', icono:'matriz', estado:'disponible', grupo:'Reportes',
+    resumen:'Genera el Excel de la Matriz de monitoreo y un resumen listo para correo a partir de descargas del IMS, KoboToolbox o Excel.',
+    puntos:['Configuración por fuente de datos (IMS, Kobo y EXCEL)','En IMS (NFI): selección de Proyecto y Tipo por kit, omisión de socios errados y separación de recurrentes (SI/NO)','Resumen automático de personas por sexo/edad, periodo y registros omitidos'],
+    vista:viewMatrizMonitoreo, enlazar:bindMatrizMonitoreo }
 ];
