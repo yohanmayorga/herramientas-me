@@ -11,7 +11,7 @@ const MMAT = {
   raw: null,     // { headers, selectHeaders, rows, sheet, linkedInfo, sig } para Kobo / Excel
   map: {},       // mapeo de columnas para Kobo / Excel
   manual: {},    // valores manuales fijos por campo cuando se elige '__manual__'
-  xlsform: null, // perfil del XLSForm cargado o recordado para Kobo
+  xlsform: null, // perfil del XLSForm cargado en la sesión actual (sin guardar en memoria)
   koboReady: false, // true cuando el usuario hace clic en Avanzar en Kobo
   defProj: 'DHR Emergencia',
   defProjOtro: '',
@@ -106,19 +106,24 @@ function mmParseRaw(wb, fileName){
 }
 
 const KOBO_PREFS_KEY = 'herramientas_me_kobo_prefs_v1';
-const KOBO_XLSFORM_KEY = 'herramientas_me_kobo_xlsforms_v1';
 const KOBO_META_EXACT = new Set([
-  'start','end','today','deviceid','username','simserial','subscriberid','phonenumber','audit','mindate','0',
+  'start','end','today','deviceid','username','simserial','subscriberid','phonenumber','audit','logo','mindate','maxdate','0',
   'instanceid','formhub/uuid','meta/instanceid','meta/rootuuid','_submission_meta/rootuuid',
   '_id','_uuid','_submission_time','_validation_status','_notes','_status','_submitted_by','__version__','_tags',
   '_index','repeat_pstion','_parent_table_name','_parent_index',
   '_submission__id','_submission__uuid','_submission__submission_time','_submission__validation_status',
-  '_submission__notes','_submission__status','_submission__submitted_by','_submission__tags'
+  '_submission__notes','_submission__status','_submission__submitted_by','_submission__tags',
+  'c_o','c1','c3','c8','c9','cl1','cl2','cl3','lms_table','len_low','len_high',
+  'l0','m0','s0','l1','m1','s1','t','l','m','s','w_m3','w_m2','w_p2','w_p3',
+  'sd_tail_neg','sd_tail_pos','zscore','zscore_index','height_2','height_2_child',
+  'imc','imc_child','muac_index','probable_parto','calculo_edad_gestacional',
+  'g7_total','g7_pct_mujeres','g7_pct_menores'
 ]);
 const XLS_META_CALC_TYPES = new Set([
   'start','end','today','deviceid','username','simserial','subscriberid','phonenumber','audit',
-  'calculate','hidden','note','begin_group','end_group','begin_repeat','end_repeat','begin group','end group','begin repeat','end repeat'
+  'hidden','note','begin_group','end_group','begin_repeat','end_repeat','begin group','end group','begin repeat','end repeat'
 ]);
+const XLS_KEEP_CALC_RE = /\b(edad|age|discapacidad|wg_discapacidad|sexo|sex|indig|embaraz|lact|fecha|estado|municipio|parroquia|comunidad|socio|proyecto|sector)\b/;
 
 function mmIsKoboMeta(h, xlsform){
   const raw = String(h || '').trim();
@@ -126,39 +131,27 @@ function mmIsKoboMeta(h, xlsform){
   if(!f) return true;
   if(KOBO_META_EXACT.has(f) || raw.startsWith('_')) return true;
   if(f.includes('meta/') || f.includes('formhub/') || f.includes('consentimiento informado') || f.includes('declaracion de privacidad')) return true;
+  if(/\$\{[^}]+\}/.test(raw) || raw.startsWith('**ALERTA:')) return true;
   if(raw.length > 110) return true;
-  if(/^(CALC_|TOTAL_|COUNT_|SUM_|MIN_|MAX_|FLAG_|AGE_GROUP|REPEAT_PSTION|MINDATE)/.test(raw.toUpperCase())) return true;
+  if(/^(OBESITY_INDEX|CALC_|TOTAL_|COUNT_|SUM_|MIN_|MAX_|FLAG_|AGE_GROUP|REPEAT_PSTION|MINDATE|MAXDATE|DISPLAY_)/.test(raw.toUpperCase()) && !/total\s+(personas|kits)/i.test(raw)) return true;
   if(xlsform && xlsform.ignoreSet && xlsform.ignoreSet.includes(f)) return true;
   return false;
 }
 
 function mmFilterKoboHeaders(headers, xlsform){
-  return (headers || []).filter(h => !mmIsKoboMeta(h, xlsform));
-}
-
-function mmLoadXlsForms(){
-  try{ return JSON.parse(localStorage.getItem(KOBO_XLSFORM_KEY) || '[]') || []; }catch{ return []; }
-}
-function mmSaveXlsFormProfile(prof){
-  if(!prof) return;
-  try{
-    const list = mmLoadXlsForms().filter(x => x.fileName !== prof.fileName);
-    list.unshift(prof);
-    localStorage.setItem(KOBO_XLSFORM_KEY, JSON.stringify(list.slice(0, 15)));
-  }catch{}
-}
-function mmFindMatchingXlsForm(headers){
-  const list = mmLoadXlsForms();
-  if(!list.length || !headers || !headers.length) return null;
-  const hSet = new Set(headers.map(h => fold(h)));
-  let best = null, bestScore = 0;
-  for(const xf of list){
-    let hits = 0;
-    (xf.qKeys || []).forEach(k => { if(hSet.has(k)) hits++; });
-    const score = xf.qKeys && xf.qKeys.length ? hits / xf.qKeys.length : 0;
-    if(hits >= 2 && score > bestScore){ best = xf; bestScore = score; }
-  }
-  return best;
+  const list = headers || [];
+  const hSet = new Set(list.map(h => fold(h)));
+  const multiSet = new Set(xlsform && xlsform.multiSet ? xlsform.multiSet : []);
+  return list.filter(h => {
+    if(mmIsKoboMeta(h, xlsform)) return false;
+    const raw = String(h || '').trim();
+    const slash = raw.indexOf('/');
+    if(slash > 0 && !raw.startsWith('_')){
+      const prefix = fold(raw.slice(0, slash).trim());
+      if(hSet.has(prefix) || multiSet.has(prefix)) return false;
+    }
+    return true;
+  });
 }
 
 function mmParseXlsForm(wb, fileName){
@@ -173,6 +166,7 @@ function mmParseXlsForm(wb, fileName){
   if(iType < 0 || iName < 0) throw new Error('La hoja "survey" debe tener columnas "type" y "name".');
 
   const ignoreSet = new Set();
+  const multiSet = new Set();
   const qKeys = [];
   let metaCount = 0, calcCount = 0, qCount = 0;
 
@@ -183,23 +177,29 @@ function mmParseXlsForm(wb, fileName){
     const name = toText(row[iName]);
     const labels = labelCols.map(ci => toText(row[ci])).filter(Boolean);
     if(!rawType && !name) continue;
-    if(XLS_META_CALC_TYPES.has(rawType) || XLS_META_CALC_TYPES.has(baseType)){
-      if(baseType === 'calculate') calcCount++; else metaCount++;
+    const isCalc = baseType === 'calculate';
+    const keepCalc = isCalc && (XLS_KEEP_CALC_RE.test(fold(name)) || labels.some(lb => XLS_KEEP_CALC_RE.test(fold(lb))));
+    if(XLS_META_CALC_TYPES.has(rawType) || XLS_META_CALC_TYPES.has(baseType) || (isCalc && !keepCalc)){
+      if(isCalc) calcCount++; else metaCount++;
       if(name) ignoreSet.add(fold(name));
       labels.forEach(lb => ignoreSet.add(fold(lb)));
     } else {
       qCount++;
+      if(baseType === 'select_multiple'){
+        if(name) multiSet.add(fold(name));
+        labels.forEach(lb => multiSet.add(fold(lb)));
+      }
       if(name) qKeys.push(fold(name));
       labels.forEach(lb => qKeys.push(fold(lb)));
     }
   }
   return {
     fileName,
-    savedAt: new Date().toISOString().slice(0, 10),
     qCount,
     calcCount,
     metaCount,
     ignoreSet: [...ignoreSet],
+    multiSet: [...multiSet],
     qKeys: [...new Set(qKeys)].slice(0, 250)
   };
 }
@@ -227,7 +227,8 @@ const KOBO_GEO_POINTS = [
   { match: s => s.includes('urena') && s.includes('venezuela mia'), geo: { estado:'Táchira', mun:'Pedro María Ureña', parr:'Ureña', com:'Ureña "Venezuela Mía"' } },
   { match: s => s.includes('capacho'), geo: { estado:'Táchira', mun:'Independencia', parr:'Capacho Nuevo', com:'Capacho' } },
   { match: s => s.includes('la pedrera'), geo: { estado:'Táchira', mun:'Libertador', parr:'San Joaquín de Navay', com:'La Pedrera' } },
-  { match: s => s.includes('guasdualito'), geo: { estado:'Apure', mun:'Páez', parr:'Guasdualito', com:'Guasdualito "Jesus Maestro"' } }
+  { match: s => s.includes('guasdualito'), geo: { estado:'Apure', mun:'Páez', parr:'Guasdualito', com:'Guasdualito "Jesus Maestro"' } },
+  { match: s => s.startsWith('cpt2 '), geo: { estado:'Amazonas', mun:'Atures', parr:'', com:'' } }
 ];
 
 const KOBO_GEO_TEAMS = [
@@ -235,14 +236,31 @@ const KOBO_GEO_TEAMS = [
   { match: s => s.includes('maniapure') || s === 'fpm', geo: { estado:'Bolívar', mun:'Gran Sabana', parr:'Gran Sabana', com:'' } },
   { match: s => s.includes('diocesis de san cristobal') || s === 'dsc', geo: { estado:'Táchira', mun:'', parr:'', com:'' } },
   { match: s => s.includes('caritas guasdualito') || s === 'cgdt', geo: { estado:'Apure', mun:'Páez', parr:'Guasdualito', com:'' } },
-  { match: s => s.includes('odisef'), geo: { estado:'Táchira', mun:'Libertador', parr:'San Joaquín de Navay', com:'' } }
+  { match: s => s.includes('odisef'), geo: { estado:'Táchira', mun:'', parr:'', com:'' } },
+  { match: s => s.includes('oim - amazonas') || s.includes('oim amazonas'), geo: { estado:'Amazonas', mun:'Atures', parr:'', com:'' } },
+  { match: s => s.includes('ven da tu mano'), geo: { estado:'Apure', mun:'', parr:'', com:'' } }
 ];
 
+const KOBO_GEO_INVALID = new Set([
+  'no','si','no sabe','no responde','no sabe no responde','prefiere no responder',
+  'no aplica','na','n a','ninguno','ninguna','0','1','true','false'
+]);
+const KOBO_GENERIC_PUNTOS = new Set([
+  'ventanilla','centro de salud comunidad','centro de salud/comunidad','punto de atencion','otro','otra'
+]);
+function mmCleanGeoVal(raw){
+  const t = toText(raw) || '';
+  if(!t) return '';
+  const f = fold(t);
+  return (!f || KOBO_GEO_INVALID.has(f)) ? '' : t;
+}
+
 function mmKoboResolveGeo({ socio, punto, estadoRaw, munRaw, parrRaw, comRaw }){
-  let estado = toText(estadoRaw) || '', mun = toText(munRaw) || '', parr = toText(parrRaw) || '', com = toText(comRaw) || '';
+  let estado = mmCleanGeoVal(estadoRaw), mun = mmCleanGeoVal(munRaw), parr = mmCleanGeoVal(parrRaw), com = mmCleanGeoVal(comRaw);
   const estCode = fold(estado);
   if(KOBO_ESTADO_CODES[estCode]) estado = KOBO_ESTADO_CODES[estCode];
-  const fp = fold(punto || com);
+  const pClean = mmCleanGeoVal(punto);
+  const fp = fold(pClean || com);
   const fs = fold(socio);
   const ptHit = fp ? KOBO_GEO_POINTS.find(x => x.match(fp)) : null;
   const tmHit = fs ? KOBO_GEO_TEAMS.find(x => x.match(fs)) : null;
@@ -253,28 +271,28 @@ function mmKoboResolveGeo({ socio, punto, estadoRaw, munRaw, parrRaw, comRaw }){
     if(!parr && ref.parr) parr = ref.parr;
     if(!com && ref.com) com = ref.com;
   }
-  if(!com && punto) com = toText(punto);
+  if(!com && pClean && !KOBO_GENERIC_PUNTOS.has(fold(pClean))) com = pClean;
   return { estado, mun, parr, com };
 }
 
 const MMAT_KOBO_FIELDS = [
-  { k:'fecha', l:'Fecha de atención / registro', aliases:['fecha','fecha de asistencia','fecha de entrega','assistance_date','date'] },
+  { k:'fecha', l:'Fecha de atención / registro', aliases:['fecha de la atencion o actividad','fecha de atencion','fecha de asistencia','fecha de entrega','fecha','assistance_date','date'], exclude:['nacimiento','ultima regla','primer control','ultimo control'] },
   { k:'proyecto', l:'Proyecto', aliases:['project','proyecto','donante','programa'] },
-  { k:'socio', l:'Socio / Equipo implementador', aliases:['seleccione equipo implementador','equipo implementador','socio','socio implementador','org','organizacion','partner'] },
-  { k:'punto', l:'Punto específico / Sede (para ubicación)', aliases:['seleccione','punto de atencion','punto especifico','sede','ubicacion'] },
-  { k:'estado', l:'Estado', aliases:['estado','entidad federal','state'] },
-  { k:'municipio', l:'Municipio', aliases:['municipio','municipality'] },
+  { k:'socio', l:'Socio / Equipo implementador', aliases:['especifique el socio implementador','seleccione equipo implementador','equipo implementador','socio implementador','quien brindo la atencion','socio','org','organizacion','partner'] },
+  { k:'punto', l:'Punto específico / Sede (para ubicación)', aliases:['seleccione','0.3 punto de atencion','punto de atencion','punto especifico','sede','ubicacion'], exclude:['tipo de punto'] },
+  { k:'estado', l:'Estado', aliases:['estado','entidad federal','state'], exclude:['embarazo','lactancia','departamento','inicio su viaje','tiene intencion'] },
+  { k:'municipio', l:'Municipio', aliases:['municipio','municipality'], exclude:['inicio su viaje','tiene intenciones'] },
   { k:'parroquia', l:'Parroquia', aliases:['parroquia','parish'] },
-  { k:'comunidad', l:'Comunidad', aliases:['comunidad','community','sector o comunidad'] },
-  { k:'sector', l:'Sector / Tipo de asistencia', aliases:['sector','tipo de punto de atencion','seleccione la asistencia provista','tipo de asistencia','area'] },
+  { k:'comunidad', l:'Comunidad', aliases:['comunidad','sector o comunidad','community'], exclude:['indigena','miembro de una comunidad','persona de la comunidad','actividad comunitaria'] },
+  { k:'sector', l:'Sector / Tipo de asistencia', aliases:['seleccione la asistencia provista','sector','tipo de asistencia','tipo de punto de atencion','area'] },
   { k:'caso', l:'Código de familia / caso (para recurrentes)', allowId:true, aliases:['_id','_submission__id','gdc_code','codigo de caso','codigo de familia','id familia','familia'] },
-  { k:'nombres', l:'Nombres (para inferir sexo si falta)', aliases:['nombres','nombre','primer nombre'] },
+  { k:'nombres', l:'Nombres (para inferir sexo si falta)', aliases:['nombres','nombre y apellido','nombre','primer nombre'] },
   { k:'parentesco', l:'Parentesco (jefe de hogar / líder)', aliases:['parentesco','jefe de hogar','lider','relacion'] },
-  { k:'sexo', l:'Sexo', aliases:['cual es su sexo','sexo','sex','genero'] },
-  { k:'edad', l:'Edad (años cumplidos)', aliases:['cual es su edad','edad en anos','edad','age'] },
-  { k:'indig', l:'Población indígena', aliases:['comunidad indigena','poblacion indigena','indigena','etnia'] },
-  { k:'disc', l:'Personas con discapacidad', aliases:['discapacidad','personas con discapacidad'] },
-  { k:'preg', l:'Embarazada', aliases:['estado de embarazo','embarazo','embarazada'] },
+  { k:'sexo', l:'Sexo', aliases:['sexo','cual es su sexo','sex','genero'] },
+  { k:'edad', l:'Edad (años cumplidos)', aliases:['edad','edad en anos','cual es su edad','age'] },
+  { k:'indig', l:'Población indígena', aliases:['pertenencia etnica','comunidad indigena','poblacion indigena','total personas indigenas','indigena','etnia'] },
+  { k:'disc', l:'Personas con discapacidad', aliases:['wg_discapacidad','total personas con discapacidad','personas con discapacidad','discapacidad'] },
+  { k:'preg', l:'Embarazada', aliases:['estado de embarazo o lactancia','estado de embarazo','embarazo','embarazada'] },
   { k:'lact', l:'En lactancia', aliases:['estado de lactancia','lactancia','lactante'] },
   { k:'kits', l:'Total kits (si aplica)', aliases:['total kits','kits','cantidad de kits'] }
 ];
@@ -300,9 +318,24 @@ function mmKoboFieldHeaders(f, selectHeaders, allHeaders){
 function mmKoboAutoMap(selectHeaders, allHeaders, sig){
   const map = {}, manual = {};
   MMAT_KOBO_FIELDS.forEach(f => {
-    const pool = mmKoboFieldHeaders(f, selectHeaders, allHeaders);
-    let hit = pool.find(h => f.aliases.some(a => fold(h) === fold(a)));
-    if(!hit) hit = pool.find(h => f.aliases.some(a => fold(h).includes(fold(a))));
+    const pool = mmKoboFieldHeaders(f, selectHeaders, allHeaders).filter(h => {
+      if(!f.exclude || !f.exclude.length) return true;
+      const fh = fold(h);
+      return !f.exclude.some(ex => fh.includes(fold(ex)));
+    });
+    let hit = '';
+    for(const a of f.aliases){
+      const fa = fold(a);
+      hit = pool.find(h => fold(h) === fa);
+      if(hit) break;
+    }
+    if(!hit){
+      for(const a of f.aliases){
+        const fa = fold(a);
+        hit = pool.find(h => fold(h).includes(fa));
+        if(hit) break;
+      }
+    }
     map[f.k] = hit || '';
   });
   const saved = sig ? mmLoadKoboPrefs()[sig] : null;
@@ -375,7 +408,7 @@ function mmParseKobo(wb, fileName, explicitXls){
   if(parentMeta && childMeta && parentMeta !== childMeta){
     const allHeaders = [...childMeta.headers];
     parentMeta.headers.forEach(h => { if(!allHeaders.includes(h)) allHeaders.push(h); });
-    const xf = explicitXls || mmFindMatchingXlsForm(allHeaders);
+    const xf = explicitXls || null;
     const selectHeaders = mmFilterKoboHeaders(allHeaders, xf);
     const keepSet = new Set([...selectHeaders, '_id', '_submission__id', '_index']);
 
@@ -421,7 +454,7 @@ function mmParseKobo(wb, fileName, explicitXls){
   }
 
   const main = metas.sort((a, b) => b.estRows - a.estRows)[0];
-  const xf = explicitXls || mmFindMatchingXlsForm(main.headers);
+  const xf = explicitXls || null;
   const selectHeaders = mmFilterKoboHeaders(main.headers, xf);
   const keepSet = new Set([...selectHeaders, '_id', '_submission__id', '_index']);
   const rows = mmExtractSheetRows(main.ws, main, keepSet);
@@ -612,8 +645,52 @@ function mmKoboFlag(v){
   if(n != null) return n > 0 ? 1 : 0;
   const f = fold(toText(v));
   if(!f) return 0;
-  if(['no','ninguno','ninguna','no aplica','na','n a','no sabe','prefiere no responder','0','false'].includes(f)) return 0;
+  if(['no','ninguno','ninguna','no aplica','na','n a','no sabe','no responde','no sabe no responde','prefiere no responder','0','false'].includes(f)) return 0;
   return 1;
+}
+
+function mmKoboIndigFlag(v){
+  if(v == null) return 0;
+  const n = toNum(v);
+  if(n != null) return Math.max(0, Math.floor(n));
+  const f = fold(toText(v));
+  if(!f) return 0;
+  if(['no','ninguno','ninguna','no aplica','na','n a','no sabe','no responde','no sabe no responde','prefiere no responder','otra','otro','afrodescendiente','0','false'].includes(f)) return 0;
+  return 1;
+}
+
+function mmKoboFindCol(headers, pred){
+  return (headers || []).find(h => pred(fold(h))) || '';
+}
+
+function mmKoboResolveSocio(r, socioCol, headers){
+  let s = '';
+  if(socioCol === '__manual__') s = MMAT.manual.socio || '';
+  else if(socioCol) s = toText(r[socioCol]) || '';
+
+  if(socioCol && socioCol !== '__manual__' && headers){
+    const fs = fold(s);
+    if(fs && fs.includes('especificar')){
+      const espCol = mmKoboFindCol(headers, fh => fh !== fold(socioCol) && (fh.includes('especifique el socio') || fh.includes('socio implementador')));
+      const espVal = espCol ? toText(r[espCol]) : '';
+      if(espVal) s = espVal;
+    } else if(!s && fold(socioCol).includes('especifique')){
+      const mainCol = mmKoboFindCol(headers, fh => fh !== fold(socioCol) && (fh.includes('quien brindo') || fh.includes('equipo implementador')));
+      const mainVal = mainCol ? toText(r[mainCol]) : '';
+      if(mainVal && !fold(mainVal).includes('especificar')) s = mainVal;
+    }
+  }
+  if(KOBO_ORG_MAP[fold(s)]) s = KOBO_ORG_MAP[fold(s)];
+  return s;
+}
+
+function mmKoboWgDisc(r, wgCols){
+  for(const col of wgCols){
+    const f = fold(toText(r[col]));
+    if(!f) continue;
+    if(f.includes('mucha dificultad') || f.includes('le resulta imposible') || f === '3' || f === '4') return 1;
+  }
+  return 0;
 }
 
 function mmComputeKobo(){
@@ -623,11 +700,28 @@ function mmComputeKobo(){
   const seenBySec = new Map(), grpMap = new Map(), ajustes = [];
   let omitSocio = 0, omitFecha = 0;
 
+  const hdrs = R.selectHeaders || R.headers || [];
+  const wgCols = hdrs.filter(h => {
+    const f = fold(h);
+    return f.includes('dificultad para ver') || f.includes('dificultad para oir') || f.includes('dificultad para caminar')
+      || f.includes('dificultad para recordar') || f.includes('autocuidado') || f.includes('cuidarse a si mismo')
+      || f.includes('dificultad para comunicarse');
+  });
+  const birthCol = mmKoboFindCol(hdrs, f => f.includes('fecha de nacimiento'));
+  const comCols = {
+    ma: mmKoboFindCol(hdrs, f => f === 'mujeres adultas'),
+    ha: mmKoboFindCol(hdrs, f => f === 'hombres adultos'),
+    na: mmKoboFindCol(hdrs, f => f.includes('ninas y adolescentes')),
+    no: mmKoboFindCol(hdrs, f => f.includes('ninos y adolescentes')),
+    disc: mmKoboFindCol(hdrs, f => f.includes('total personas con discapacidad')),
+    indig: mmKoboFindCol(hdrs, f => f.includes('total personas indigenas'))
+  };
+  const hasComCols = !!(comCols.ma || comCols.ha || comCols.na || comCols.no);
+
   const prepared = [];
   R.rows.forEach((r, idx) => {
     const fecha = M.fecha ? toDate(mmKoboVal(r, 'fecha')) : '';
-    let socio = toText(mmKoboVal(r, 'socio')) || '';
-    if(KOBO_ORG_MAP[fold(socio)]) socio = KOBO_ORG_MAP[fold(socio)];
+    const socio = mmKoboResolveSocio(r, M.socio, hdrs);
     if((M.socio === '__manual__' || M.socio) && MMAT.validSocios.size && !MMAT.validSocios.has(fold(socio || '(vacío)'))){ omitSocio++; return; }
     if((MMAT.from || MMAT.to) && (!fecha || (MMAT.from && fecha < MMAT.from) || (MMAT.to && fecha > MMAT.to))){ omitFecha++; return; }
 
@@ -652,19 +746,38 @@ function mmComputeKobo(){
     const caso = toText(mmKoboVal(r, 'caso'));
     const subKey = toText(r._koboSubId || r._submission__id || r._id) || caso || `row_${r._row || idx + 1}`;
     const rawAge = toNum(mmKoboVal(r, 'edad'));
-    const age = rawAge != null && rawAge >= 0 && rawAge <= 110 ? Math.floor(rawAge) : null;
+    let age = rawAge != null && rawAge >= 0 && rawAge <= 110 ? Math.floor(rawAge) : null;
+    const birth = birthCol ? toDate(r[birthCol]) : '';
+    if(age == null && birth && fecha && birth <= fecha){
+      const aCalc = ageAt(birth, fecha);
+      if(aCalc != null && aCalc >= 0 && aCalc <= 110) age = aCalc;
+    }
     const sexo = mmKoboNormSex(mmKoboVal(r, 'sexo'));
     const parentesco = toText(mmKoboVal(r, 'parentesco'));
     const nombres = toText(mmKoboVal(r, 'nombres'));
-    const indig = mmKoboFlag(mmKoboVal(r, 'indig'));
-    const disc = mmKoboFlag(mmKoboVal(r, 'disc'));
+    const indig = mmKoboIndigFlag(mmKoboVal(r, 'indig'));
+    let disc = M.disc ? mmKoboFlag(mmKoboVal(r, 'disc')) : 0;
+    if(!M.disc && wgCols.length) disc = mmKoboWgDisc(r, wgCols);
     const preg = (mmKoboFlag(mmKoboVal(r, 'preg')) || mmKoboFlag(mmKoboVal(r, 'lact'))) ? 1 : 0;
     const kits = Math.max(0, toNum(mmKoboVal(r, 'kits')) || 0);
+
+    if(age == null && !sexo && hasComCols){
+      const ma = Math.max(0, toNum(comCols.ma ? r[comCols.ma] : 0) || 0);
+      const ha = Math.max(0, toNum(comCols.ha ? r[comCols.ha] : 0) || 0);
+      const na = Math.max(0, toNum(comCols.na ? r[comCols.na] : 0) || 0);
+      const no = Math.max(0, toNum(comCols.no ? r[comCols.no] : 0) || 0);
+      if(ma + ha + na + no > 0){
+        const cDisc = Math.max(disc, toNum(comCols.disc ? r[comCols.disc] : 0) || 0);
+        const cIndig = Math.max(indig, toNum(comCols.indig ? r[comCols.indig] : 0) || 0);
+        prepared.push({ r, fecha, proj, socio, geo, sector, caso, subKey, indig:cIndig, disc:cDisc, preg, kits, comCounts:{ ma, ha, na, no } });
+        return;
+      }
+    }
 
     const p = {
       n: r._row || (idx + 2),
       fam: subKey,
-      birth: null,
+      birth: birth || null,
       age,
       sexo,
       rel: fold(parentesco),
@@ -679,6 +792,7 @@ function mmComputeKobo(){
   // Agrupar por envío (_submission__id) para dar contexto de hogar/líder al imputar edad y sexo
   const bySub = new Map();
   prepared.forEach(item => {
+    if(!item.p) return;
     let a = bySub.get(item.subKey);
     if(!a){
       a = { n: item.r._row, num: item.subKey, fecha: item.fecha, code: item.subKey, caso: item.caso, ps: [] };
@@ -690,11 +804,7 @@ function mmComputeKobo(){
   prepared.sort((a, b) => (a.fecha || '').localeCompare(b.fecha || '') || a.r._row - b.r._row);
 
   prepared.forEach(item => {
-    const { fecha, proj, socio, geo, sector, caso, subKey, indig, disc, preg, kits, p } = item;
-    const a = bySub.get(subKey);
-    const imp = mmImputePerson(p, a);
-    if(imp.adj) ajustes.push(imp.adj);
-
+    const { fecha, proj, socio, geo, sector, caso, subKey, indig, disc, preg, kits, p, comCounts } = item;
     let rec = 'NO';
     if(caso){
       if(!seenBySec.has(sector)) seenBySec.set(sector, new Set());
@@ -703,8 +813,18 @@ function mmComputeKobo(){
     }
 
     const ages = Array(18).fill(0);
-    const bi = MAT_BANDS.findIndex(([,, lo, hi]) => imp.age >= lo && imp.age <= hi);
-    if(bi >= 0) ages[bi * 2 + (imp.sexo === 'Mujer' ? 0 : 1)]++;
+    if(comCounts){
+      ages[4] += comCounts.na;
+      ages[5] += comCounts.no;
+      ages[12] += comCounts.ma;
+      ages[13] += comCounts.ha;
+    } else {
+      const a = bySub.get(subKey);
+      const imp = mmImputePerson(p, a);
+      if(imp.adj) ajustes.push(imp.adj);
+      const bi = MAT_BANDS.findIndex(([,, lo, hi]) => imp.age >= lo && imp.age <= hi);
+      if(bi >= 0) ages[bi * 2 + (imp.sexo === 'Mujer' ? 0 : 1)]++;
+    }
 
     const k = [fecha || '', proj, socio, geo.estado, geo.mun, geo.parr, geo.com, sector, rec].join('|');
     let grp = grpMap.get(k);
@@ -937,6 +1057,16 @@ function mmFillGeo(outRows){
     };
     if(orig.estado && orig.mun && orig.parr && orig.com) return;
 
+    const applyIne = () => {
+      if(typeof geoIneInfer !== 'function' || (r.estado && r.mun && r.parr)) return;
+      const inf = geoIneInfer({ estado: r.estado, mun: r.mun, parr: r.parr, com: r.com });
+      if(!r.estado && inf.estado){ r.estado = inf.estado; r._geo.estado = 'imp'; }
+      if(!r.mun && inf.mun){ r.mun = inf.mun; r._geo.mun = 'imp'; }
+      if(!r.parr && inf.parr){ r.parr = inf.parr; r._geo.parr = 'imp'; }
+    };
+    applyIne();
+    if(r.estado && r.mun && r.parr && r.com) return;
+
     const rDepth = depth(r), rDn = dayN(r.fecha), rSk = fold(r.socio || '');
     const fe = fold(r.estado), fm = fold(r.mun), fp = fold(r.parr);
 
@@ -961,11 +1091,15 @@ function mmFillGeo(outRows){
         return b.d - a.d;
       });
       const best = compat[0].g;
-      r.estado = best.estado; r.mun = best.mun; r.parr = best.parr; r.com = best.com;
+      if(!r.estado && best.estado) r.estado = best.estado;
+      if(!r.mun && best.mun) r.mun = best.mun;
+      if(!r.parr && best.parr) r.parr = best.parr;
+      if(!r.com && best.com) r.com = best.com;
       ['estado','mun','parr','com'].forEach(k => {
         if(!orig[k]) r._geo[k] = r[k] ? 'imp' : 'miss';
       });
     }
+    applyIne();
   });
 }
 
@@ -1056,6 +1190,40 @@ async function mmExportAjustesExcel(res){
   const aoa = [headers, ...list.map(x => [x.filaIms, x.codigoAsistencia, x.codigoCaso, x.filaRegistro, x.persona, x.parentesco, x.faltante, x.asignacion])];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Ajustes');
   await saveFile(fname, xlsxBlob(wb));
+}
+
+function mmFieldDefaultHint(k, R, isKobo){
+  if(!isKobo){
+    if(k === 'proyecto') return 'Usará el «Proyecto por defecto» indicado arriba.';
+    if(k === 'sector') return 'Usará el «Sector por defecto» indicado arriba.';
+    if(['estado','municipio','parroquia','comunidad'].includes(k)) return 'Si falta, se inferirá de filas compatibles (amarillo pastel); si no, quedará en blanco (rojo pastel).';
+    return '';
+  }
+  const hdrs = (R && (R.selectHeaders || R.headers)) || [];
+  if(k === 'disc'){
+    const wgCount = hdrs.filter(h => {
+      const f = fold(h);
+      return f.includes('dificultad para ver') || f.includes('dificultad para oir') || f.includes('dificultad para caminar')
+        || f.includes('dificultad para recordar') || f.includes('autocuidado') || f.includes('cuidarse a si mismo')
+        || f.includes('dificultad para comunicarse');
+    }).length;
+    return wgCount
+      ? `Usará el criterio del Grupo de Washington («Tiene mucha dificultad» o «Le resulta imposible» en ${wgCount} preguntas detectadas).`
+      : 'Sin preguntas del Grupo de Washington detectadas (se colocará 0).';
+  }
+  if(k === 'edad'){
+    const birthCol = mmKoboFindCol(hdrs, f => f.includes('fecha de nacimiento'));
+    return birthCol
+      ? `Calculará la edad desde «${birthCol}»; si falta, se imputará según parentesco.`
+      : 'Se imputará automáticamente según parentesco o contexto del hogar (registrado en Ajustes).';
+  }
+  if(k === 'sexo') return 'Se inferirá por embarazo/lactancia o por nombre (registrado en Ajustes).';
+  if(k === 'proyecto') return 'Usará el «Proyecto por defecto» indicado arriba.';
+  if(k === 'sector') return 'Usará el «Sector por defecto» indicado arriba.';
+  if(['estado','municipio','parroquia'].includes(k)) return 'Si falta, se inferirá por socio/punto o filas compatibles (amarillo pastel); si no, quedará en blanco (rojo pastel).';
+  if(k === 'comunidad') return 'Si falta, usará el punto específico (si aplica) o se inferirá; si no, quedará en blanco (rojo pastel).';
+  if(['indig','preg','lact','kits'].includes(k)) return 'No se aplicará (se colocará 0).';
+  return '';
 }
 
 function viewMatrizMonitoreo(){
@@ -1191,7 +1359,8 @@ function viewMatrizMonitoreo(){
         ${fields.map(f => {
           const cur = M[f.k] || '';
           const manVal = MMAT.manual[f.k] || '';
-          return `<tr><td>${esc(f.l)}</td><td><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><select class="in" data-mmap="${f.k}" style="flex:1;min-width:200px">${optsFor(f, cur)}</select><input type="text" class="in" data-mmanual="${f.k}" value="${esc(manVal)}" placeholder="Valor fijo para todas las filas…" style="flex:1;min-width:170px;${cur === '__manual__' ? '' : 'display:none'}"></div></td></tr>`;
+          const hint = mmFieldDefaultHint(f.k, R, isKobo);
+          return `<tr><td>${esc(f.l)}</td><td><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><select class="in" data-mmap="${f.k}" style="flex:1;min-width:200px">${optsFor(f, cur)}</select><input type="text" class="in" data-mmanual="${f.k}" value="${esc(manVal)}" placeholder="Valor fijo para todas las filas…" style="flex:1;min-width:170px;${cur === '__manual__' ? '' : 'display:none'}"></div>${hint ? `<div class="muted" data-mhint="${f.k}" style="font-size:12px;margin-top:4px;${cur === '' ? '' : 'display:none'}">${esc(hint)}</div>` : ''}</td></tr>`;
         }).join('')}
       </tbody></table></div>
     </div>`;
@@ -1231,7 +1400,7 @@ function viewMatrizMonitoreo(){
   const koboXlsHtml = MMAT.source === 'kobo' ? (() => {
     const xf = MMAT.xlsform || (MMAT.raw && MMAT.raw.xlsform) || null;
     const canAdv = !!(MMAT.file && MMAT.wb);
-    return `<h2>2b. XLSForm del formulario (opcional, se guarda en memoria)</h2>
+    return `<h2>2b. XLSForm del formulario (opcional)</h2>
     <div class="drop" id="mmXlsDrop" tabindex="0" role="button" style="margin-bottom:12px;padding:16px">
       <strong>${xf ? esc(xf.fileName) : 'Arrastra aquí el XLSForm de Kobo o haz clic para seleccionarlo'}</strong>
       <span>${xf ? `Activo (${fmt(xf.qCount)} preguntas, ${fmt(xf.calcCount)} cálculos y ${fmt(xf.metaCount)} metadatos excluidos). Haz clic o arrastra para reemplazar.` : 'Opcional: ayuda al sistema a identificar preguntas y ocultar cálculos/metadatos antes de avanzar (.xlsx, .xls)'}</span>
@@ -1308,6 +1477,7 @@ async function mmLoadMainFile(f){
       ? { type:'array', cellDates:true, cellStyles:false, cellHTML:false, cellFormula:false, cellNF:false }
       : { type:'array', cellDates:true };
     const wb = XLSX.read(buf, readOpts);
+    const hadFile = !!MMAT.file;
     MMAT.file = f; MMAT.wb = wb; MMAT.imsObj = null; MMAT.raw = null;
     if(MMAT.source === 'ims'){
       const det = detectForm(wb);
@@ -1316,17 +1486,9 @@ async function mmLoadMainFile(f){
       mmApplyImsType(initType);
     } else if(MMAT.source === 'kobo'){
       MMAT.koboReady = false;
+      if(hadFile) MMAT.xlsform = null;
       MMAT.defProj = '';
       MMAT.defSector = '';
-      if(!MMAT.xlsform){
-        const hdrs = [];
-        for(const sn of wb.SheetNames){
-          const m = mmInspectSheetMeta(wb.Sheets[sn]);
-          if(m && m.headers) m.headers.forEach(h => hdrs.push(h));
-        }
-        const matched = mmFindMatchingXlsForm(hdrs);
-        if(matched) MMAT.xlsform = matched;
-      }
     } else {
       MMAT.defProj = '';
       MMAT.defSector = '';
@@ -1349,9 +1511,11 @@ function mmSyncRawMeta(){
   const R = MMAT.raw, M = MMAT.map;
   if(!R) return;
   if(M.socio && M.socio !== '__manual__'){
+    const hdrs = R.selectHeaders || R.headers;
     MMAT.socioList = countBy(R.rows, r => {
-      let s = toText(r[M.socio]) || '';
-      if(MMAT.source === 'kobo' && KOBO_ORG_MAP[fold(s)]) s = KOBO_ORG_MAP[fold(s)];
+      const s = MMAT.source === 'kobo'
+        ? mmKoboResolveSocio(r, M.socio, hdrs)
+        : (toText(r[M.socio]) || '');
       return s || '(vacío)';
     });
     MMAT.validSocios = new Set(MMAT.socioList.map(([s]) => fold(s)));
@@ -1372,6 +1536,7 @@ function bindMatrizMonitoreo(){
   document.querySelectorAll('[data-msrc]').forEach(b => b.onclick = () => {
     MMAT.source = b.dataset.msrc;
     MMAT.file = null; MMAT.wb = null; MMAT.imsType = ''; MMAT.imsDet = ''; MMAT.imsObj = null; MMAT.raw = null;
+    MMAT.xlsform = null;
     MMAT.koboReady = false;
     MMAT.defProj = MMAT.source === 'ims' ? 'DHR Emergencia' : '';
     MMAT.defSector = MMAT.source === 'ims' ? 'NFI' : '';
@@ -1397,7 +1562,6 @@ function bindMatrizMonitoreo(){
         const wb = XLSX.read(buf, { type:'array' });
         const prof = mmParseXlsForm(wb, f.name);
         MMAT.xlsform = prof;
-        mmSaveXlsFormProfile(prof);
         toast(`XLSForm cargado (${prof.qCount} preguntas, ${prof.calcCount} cálculos excluidos)`);
       }catch(err){ console.error(err); toast('No se pudo leer el XLSForm: ' + (err.message || err)); }
       finally{ busy(false); navApply(); }
@@ -1502,6 +1666,8 @@ function bindMatrizMonitoreo(){
         manInp.style.display = sel.value === '__manual__' ? '' : 'none';
         if(sel.value === '__manual__') manInp.focus();
       }
+      const hintEl = document.querySelector(`[data-mhint="${k}"]`);
+      if(hintEl) hintEl.style.display = sel.value === '' ? '' : 'none';
       if(MMAT.source === 'kobo' && MMAT.raw.sig) mmSaveKoboPrefs(MMAT.raw.sig, MMAT.map, MMAT.manual);
       if(k === 'socio' || k === 'fecha'){ mmSyncRawMeta(); navApply(); }
       else mmRefreshOutput();

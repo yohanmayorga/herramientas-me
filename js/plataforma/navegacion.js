@@ -17,11 +17,6 @@ function navSide(){
 
 function estadoChip(e){ return e==='disponible'?'<span class="chip-st ok">Disponible</span>':'<span class="chip-st dev">En desarrollo</span>'; }
 
-function viewSideNews(){
-  return `<div class="side-h">Novedades</div>
-    <ol class="p-news">${NOVEDADES.map(([f,t])=>`<li><span>${esc(f)}</span>${esc(t)}</li>`).join('')}</ol>`;
-}
-
 function viewProximamente(h){
   return `<div class="portal"><a class="p-back" href="#/inicio">${icono('contraer',16)} Inicio</a>
     <section class="p-hero p-soon"><span class="p-ic">${icono(h.icono,28)}</span><div><div class="p-soonh"><h1>${esc(h.nombre)}</h1>${estadoChip(h.estado)}</div><p>${esc(h.resumen)}</p></div></section>
@@ -44,10 +39,9 @@ function filterDrawer(open){
 }
 
 function navApply(){
-  const side=$('#side'), sideNews=$('#sideNews'), sideFilters=$('#sideFilters'), home=$('#home'), wrap=document.querySelector('.wrap'), h=HERRAMIENTAS.find(x=>x.id===NAV.ruta);
-  const enInicio=!h, enFiltros=NAV.ruta==='proyectos'||NAV.ruta==='tableros'||NAV.ruta==='formularios';
+  const side=$('#side'), sideFilters=$('#sideFilters'), home=$('#home'), wrap=document.querySelector('.wrap'), h=HERRAMIENTAS.find(x=>x.id===NAV.ruta);
+  const enFiltros=NAV.ruta==='proyectos'||NAV.ruta==='tableros'||NAV.ruta==='formularios';
   document.body.classList.toggle('side-mini',navCollapsed());
-  document.body.classList.toggle('en-inicio',enInicio);
   document.body.classList.toggle('con-filtros',enFiltros);
   filterDrawer(false);
   side.innerHTML=navSide();
@@ -65,10 +59,6 @@ function navApply(){
       render();
     }
   }));
-  if(sideNews){
-    sideNews.hidden=!enInicio;
-    if(enInicio) sideNews.innerHTML=viewSideNews();
-  }
   if(sideFilters){
     sideFilters.hidden=!enFiltros;
     if(!enFiltros) sideFilters.innerHTML='';

@@ -1,35 +1,5 @@
-/* Herramientas M&E · Novedades, portada interactiva y arranque de la aplicación.
-   Agrega cada mejora nueva al inicio de NOVEDADES (la más reciente primero). */
-const NOVEDADES=[
-  ['Noviembre 2026','Reportes · Matriz de monitoreo: corrección de error al ordenar filas con campos geográficos vacíos o nulos (localeCompare) en Kobo y demás fuentes.'],
-  ['Noviembre 2026','Reportes · Matriz de monitoreo: corrección del flujo de avance en Kobo (visibilidad de errores, desplazamiento automático a la confirmación de columnas y cálculo seguro de semilla en imputación de edad/sexo).'],
-  ['Noviembre 2026','Reportes · Matriz de monitoreo: optimización de lectura para archivos pesados de Kobo (lectura rápida de encabezados y extracción selectiva de columnas útiles sin metadatos ni estilos).'],
-  ['Noviembre 2026','Reportes · Matriz de monitoreo: carga arrastrable del XLSForm de Kobo antes de avanzar al mapeo de columnas, y campos de Proyecto y Sector por defecto en blanco para escritura libre.'],
-  ['Noviembre 2026','Reportes · Matriz de monitoreo: soporte para cargar y recordar el XLSForm de Kobo (excluyendo automáticamente cálculos y metadatos), campo _id habilitado para Código de familia/caso, Proyecto y Sector por defecto de escritura libre y eliminación del resumen para correo/reporte.'],
-  ['Noviembre 2026','Reportes · Matriz de monitoreo: soporte inteligente para Excel de KoboToolbox con vinculación automática de envíos e individuos (_id ↔ _submission__id), confirmación de columnas con Opción manual (valor fijo), exclusión de metadatos, inferencia geográfica por equipo/punto y ajuste de edad y sexo faltantes con descarga de ajustes.'],
-  ['Noviembre 2026','Inicio: diseño minimalista sin bordes, nuevo orden de secciones y encabezado actualizado.'],
-  ['Noviembre 2026','Inicio: nueva portada interactiva con buscador universal, KPIs en vivo, tablero interactivo de Proyectos, Tableros y Formularios, radar de próximos cierres y sección de enlaces institucionales (Kobo, ODK XLSForm, PRIMA, IOM SRF e IMS).'],
-  ['Noviembre 2026','Reportes · Matriz de monitoreo: imputación jerárquica de Estado, Municipio, Parroquia y Comunidad según mismo socio y fecha más cercana (sombreado en amarillo pastel al rellenar y rojo pastel si queda vacío).'],
-  ['Noviembre 2026','Depurador IMS: nueva exportación «Matriz de monitoreo» para entregas de kits NFI, con fecha en la primera columna, selección de Proyecto (ECHO ALERT, DHR Emergencia u Otro) y Tipo (NFI o WASH) por kit, omisión de socios marcados como errados, desagregación geográfica, separación de recurrentes (SI/NO) y cruce por edad, sexo y condiciones específicas.'],
-  ['Noviembre 2026','Depurador IMS: optimización de la pestaña «Atenciones» del SITREP (agregación diaria y bloques contiguos sin COUNTIFS acumulativos) para que el Excel abra de forma instantánea con más de 100 000 registros.'],
-  ['Noviembre 2026','Depurador IMS: incorporación en el Excel del SITREP de la pestaña consolidada «Kits» (NFI y WASH) y de un cuadro de kits entregados en la pestaña principal con filtros dinámicos por tipo de kit y rango de fechas.'],
-  ['Noviembre 2026','Repositorio de tableros: incorporación del tablero DHR - General, nueva columna de tipo de actualización (Automática o Manual) y ajuste de la columna de frecuencia manteniendo las acciones de abrir y copiar.'],
-  ['Noviembre 2026','Repositorio de tableros: eliminación de las tarjetas de resumen en la parte superior para mostrar directamente el listado o las tarjetas de tableros.'],
-  ['Noviembre 2026','Repositorio de formularios: incorporación de los formularios regulares del proyecto DHR para Salud Mental (SMAPS), PSS (SMAPS) y Orientación legal (Protección).'],
-  ['Noviembre 2026','Repositorio de formularios: nueva sección en el bloque de Herramientas con el catálogo de formularios de KoboToolbox clasificados por proyecto, área temática y tipo (regular o emergencia), con filtros laterales, vista limpia sin tarjetas de resumen superior ni columna de enlace crudo, y botones para abrir o copiar cada formulario.'],
-  ['Noviembre 2026','Depurador IMS: rediseño de la página de inicio al estilo del resto de la plataforma, con acceso directo al IMS (ims.iom.int) junto al botón «Guía de uso», tarjetas de modo a ancho completo y listado de formularios configurados.'],
-  ['Noviembre 2026','Repositorio de tableros: incorporación de los tableros generales de Seguimiento de la emergencia (DHR), Gran Misión Vuelta a la Patria, Retorno Voluntario Asistido y Reintegración (AVR), Encuesta de satisfacción a beneficiarios y JAPÓN - General.'],
-  ['Noviembre 2026','Repositorio de tableros: eliminación de la columna de descripción en la tabla y de los botones de vista previa.'],
-  ['Noviembre 2026','Proyectos y Repositorio de tableros: filtros ubicados en el panel lateral derecho en versión web (al estilo de Novedades), panel deslizable oculto por defecto bajo el botón «Filtros» en pantallas pequeñas y teléfonos, y menú lateral izquierdo oculto por defecto en teléfonos en orientación horizontal.'],
-  ['Noviembre 2026','Repositorio de tableros: nueva sección con el catálogo de tableros de Power BI del proyecto ECHO (general y por socio implementador), con filtros por proyecto, tipo, alcance, estado y frecuencia de actualización, vista en tarjetas o lista, y vista previa integrada.'],
-  ['Noviembre 2026','Proyectos: cambio automático de vista Lista a Tarjetas cuando el ancho de pantalla requeriría desplazamiento lateral (manteniendo siempre el selector manual de vista), columna de Días restantes junto a Plazo transcurrido, estado unificado «Vigente» y sombreado gris en proyectos finalizados (excluidos de las tarjetas de resumen activo).'],
-  ['Noviembre 2026','Nueva sección Proyectos: plazo, presupuesto, avance y enlaces de cada proyecto, con filtros.'],
-  ['Noviembre 2026','Nueva portada de Herramientas M&E con menú lateral para reunir todas las herramientas del área.'],
-  ['Noviembre 2026','Depurador IMS: limpieza avanzada del Registro de Familias, con duplicados entre familias, nivel de severidad y filas alineadas con el archivo del IMS.'],
-  ['Noviembre 2026','Depurador IMS: mapa de Venezuela en los informes y el tablero, y exportación del SITREP.']
-];
-
-const HOME_ST={ tab:'proyectos', filtro:'' };
+/* Herramientas M&E · Portada interactiva y arranque de la aplicación. */
+const HOME_ST={ tl:'activos' };
 
 const PORTADA_ENLACES=[
   {
@@ -84,164 +54,94 @@ function homeDatos(){
   return {proys,activos,porFin,usd,eur,tabs,tabsAct,tabsAuto,forms,formsReg,formsEmer};
 }
 
-function homeBarRow(label,count,total,key,cls=''){
-  const pct=total?Math.round(count/total*100):0;
-  const on=HOME_ST.filtro===key;
-  return `<button type="button" class="hd-bar${on?' on':''}" data-hfilter="${esc(key)}" aria-pressed="${on}">
-    <span class="hd-blabel">${esc(label)}</span>
-    <span class="hd-track"><span class="hd-fill ${cls}" style="width:${pct}%"></span></span>
-    <span class="hd-bval">${count}</span>
-  </button>`;
+function homeTimelineTicks(minMs,maxMs){
+  const span=maxMs-minMs;
+  const minD=new Date(minMs), maxD=new Date(maxMs);
+  const stepM=span<=864e5*730?6:12;
+  const ticks=[];
+  const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  let y=minD.getFullYear(), m=stepM===12?0:Math.floor(minD.getMonth()/6)*6;
+  while(true){
+    const d=new Date(y,m,1);
+    const ms=d.getTime();
+    if(ms>maxMs) break;
+    if(ms>=minMs){
+      const pct=(ms-minMs)/span*100;
+      const lbl=stepM===12?String(y):`${meses[m]} ${String(y).slice(2)}`;
+      ticks.push({pct,lbl});
+    }
+    m+=stepM;
+    if(m>=12){ y+=Math.floor(m/12); m%=12; }
+  }
+  return ticks;
 }
 
-function homeGroupCounts(arr,fn){
-  const m=new Map();
-  arr.forEach(x=>{ const k=fn(x)||'General'; m.set(k,(m.get(k)||0)+1); });
-  return [...m.entries()].sort((a,b)=>b[1]-a[1]);
-}
-
-function homeRenderDash(){
+function homeRenderTimeline(){
   const d=homeDatos();
-  const f=HOME_ST.filtro;
-  if(HOME_ST.tab==='proyectos'){
-    const tot=d.proys.length;
-    const est=[
-      ['Vigentes',d.proys.filter(p=>p.c.estado==='vigente').length,'est:vigente','ok'],
-      ['Por finalizar (≤90d)',d.porFin.length,'est:porFinalizar','warn'],
-      ['Finalizados',d.proys.filter(p=>p.c.estado==='finalizado').length,'est:finalizado','off']
-    ];
-    const tipos=[
-      ['Emergencia',d.proys.filter(p=>p.tipo==='Emergencia').length,'tipo:Emergencia','warn'],
-      ['Regular',d.proys.filter(p=>p.tipo==='Regular').length,'tipo:Regular','']
-    ];
-    let lista=d.proys.slice();
-    if(f.startsWith('est:')) lista=lista.filter(p=>p.c.estado===f.slice(4));
-    else if(f.startsWith('tipo:')) lista=lista.filter(p=>p.tipo===f.slice(5));
-    lista.sort((a,b)=>(a.c.estado==='finalizado')-(b.c.estado==='finalizado')||a.fin.localeCompare(b.fin));
-    return `<div class="hd-split">
-      <div class="hd-charts">
-        <div class="hd-cgroup">
-          <div class="hd-ctitle">Por estado <span class="muted">(clic para filtrar)</span></div>
-          ${est.map(([l,c,k,cl])=>homeBarRow(l,c,tot,k,cl)).join('')}
-        </div>
-        <div class="hd-cgroup">
-          <div class="hd-ctitle">Por modalidad</div>
-          ${tipos.map(([l,c,k,cl])=>homeBarRow(l,c,tot,k,cl)).join('')}
-        </div>
-      </div>
-      <div class="hd-listwrap">
-        <div class="hd-lhead">
-          <span>${lista.length} ${lista.length===1?'proyecto':'proyectos'}${f?' (filtrado)':''}</span>
-          ${f?'<button type="button" class="hd-clear" id="hdClear">Limpiar filtro</button>':'<a href="#/proyectos">Ver todos →</a>'}
-        </div>
-        <div class="hd-list">${lista.slice(0,6).map(p=>{
-          const [stTxt,stCls]=PRJ_ESTADOS[p.c.estado];
-          const resta=p.c.estado==='finalizado'?'Cerrado':p.c.resta===0?'Hoy':`${p.c.resta}d`;
-          return `<div class="hd-item">
-            <div class="hd-imain">
-              <div class="hd-itop"><strong>${esc(p.nombre)}</strong><span class="hd-code">${esc(p.codigo)}</span><span class="hd-pill ${stCls}">${stTxt}</span></div>
-              <div class="hd-iprog"><span class="hd-ptrack"><span class="hd-pfill ${stCls}" style="width:${p.c.pct.toFixed(1)}%"></span></span><span class="hd-pmeta">${Math.round(p.c.pct)}% · ${resta}</span></div>
-            </div>
-            <div class="hd-iacts">${p.prima?`<a class="hd-act" href="${esc(p.prima)}" target="_blank" rel="noopener noreferrer" title="Abrir en PRIMA">PRIMA</a>`:''}</div>
-          </div>`;
-        }).join('')}</div>
-      </div>
-    </div>`;
-  }
+  let lista=d.proys.slice();
+  if(HOME_ST.tl==='activos') lista=lista.filter(p=>p.c.estado!=='finalizado');
+  else if(HOME_ST.tl==='Emergencia'||HOME_ST.tl==='Regular') lista=lista.filter(p=>p.tipo===HOME_ST.tl);
+  lista.sort((a,b)=>(a.c.estado==='finalizado')-(b.c.estado==='finalizado')||a.fin.localeCompare(b.fin)||a.inicio.localeCompare(b.inicio));
+  if(!lista.length) return '<p class="muted" style="margin:0">No hay proyectos para mostrar con este filtro.</p>';
 
-  if(HOME_ST.tab==='tableros'){
-    const tot=d.tabs.length;
-    const porProy=homeGroupCounts(d.tabs,t=>t.proyecto).slice(0,5);
-    const porAct=[
-      ['Actualización automática',d.tabs.filter(t=>t.actualizacion==='Automática').length,'act:Automática','ok'],
-      ['Actualización manual',d.tabs.filter(t=>t.actualizacion==='Manual').length,'act:Manual','warn']
-    ];
-    let lista=d.tabs.slice();
-    if(f.startsWith('proy:')) lista=lista.filter(t=>(t.proyecto||'General')===f.slice(5));
-    else if(f.startsWith('act:')) lista=lista.filter(t=>t.actualizacion===f.slice(4));
-    return `<div class="hd-split">
-      <div class="hd-charts">
-        <div class="hd-cgroup">
-          <div class="hd-ctitle">Por proyecto <span class="muted">(clic para filtrar)</span></div>
-          ${porProy.map(([l,c])=>homeBarRow(l,c,tot,`proy:${l}`)).join('')}
-        </div>
-        <div class="hd-cgroup">
-          <div class="hd-ctitle">Por tipo de actualización</div>
-          ${porAct.map(([l,c,k,cl])=>homeBarRow(l,c,tot,k,cl)).join('')}
-        </div>
-      </div>
-      <div class="hd-listwrap">
-        <div class="hd-lhead">
-          <span>${lista.length} ${lista.length===1?'tablero':'tableros'}${f?' (filtrado)':''}</span>
-          ${f?'<button type="button" class="hd-clear" id="hdClear">Limpiar filtro</button>':'<a href="#/tableros">Ver catálogo →</a>'}
-        </div>
-        <div class="hd-list">${lista.slice(0,6).map(t=>`<div class="hd-item">
-          <div class="hd-imain">
-            <div class="hd-itop"><strong>${esc(t.nombre)}</strong><span class="hd-pill ${t.estado==='Activo'?'ok':'off'}">${esc(t.estado)}</span></div>
-            <div class="hd-isub">${esc(t.proyecto)} · ${esc(t.alcance)} · ${esc(t.frecuencia)}</div>
-          </div>
-          <div class="hd-iacts"><a class="hd-act" href="${esc(t.url)}" target="_blank" rel="noopener noreferrer">Abrir ↗</a></div>
-        </div>`).join('')}</div>
-      </div>
-    </div>`;
-  }
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  const hoyMs=hoy.getTime();
+  const minRaw=Math.min(...lista.map(p=>prjDate(p.inicio).getTime()),hoyMs);
+  const maxRaw=Math.max(...lista.map(p=>prjDate(p.fin).getTime()),hoyMs);
+  const minD=new Date(minRaw); minD.setDate(1);
+  const maxD=new Date(maxRaw); maxD.setMonth(maxD.getMonth()+1,1);
+  const minMs=minD.getTime(), maxMs=Math.max(minMs+864e5*30,maxD.getTime()), span=maxMs-minMs;
+  const hoyPct=((hoyMs-minMs)/span)*100;
+  const ticks=homeTimelineTicks(minMs,maxMs);
 
-  const tot=d.forms.length;
-  const porArea=homeGroupCounts(d.forms,x=>x.area||'General').slice(0,5);
-  const porTipo=[
-    ['Regular',d.formsReg.length,'ftipo:Regular',''],
-    ['Emergencia',d.formsEmer.length,'ftipo:Emergencia','warn']
-  ];
-  let lista=d.forms.slice();
-  if(f.startsWith('area:')) lista=lista.filter(x=>(x.area||'General')===f.slice(5));
-  else if(f.startsWith('ftipo:')) lista=lista.filter(x=>x.tipo===f.slice(6));
-  return `<div class="hd-split">
-    <div class="hd-charts">
-      <div class="hd-cgroup">
-        <div class="hd-ctitle">Por área temática <span class="muted">(clic para filtrar)</span></div>
-        ${porArea.map(([l,c])=>homeBarRow(l,c,tot,`area:${l}`)).join('')}
+  const hoyFmt=`${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
+  const gridHtml=`<div class="tl-gridlines" aria-hidden="true">${ticks.map(t=>`<span class="tl-gline" style="left:${t.pct.toFixed(2)}%"></span>`).join('')}${hoyPct>=0&&hoyPct<=100?`<span class="tl-today" style="left:${hoyPct.toFixed(2)}%"></span>`:''}</div>`;
+
+  return `<div class="tl-wrap">
+    <div class="tl-axis-row">
+      <div class="tl-col-lbl">Proyecto</div>
+      <div class="tl-axis">
+        ${ticks.map(t=>`<span class="tl-tick" style="left:${t.pct.toFixed(2)}%">${esc(t.lbl)}</span>`).join('')}
+        ${hoyPct>=0&&hoyPct<=100?`<span class="tl-today-tag" style="left:${hoyPct.toFixed(2)}%">Hoy · ${hoyFmt}</span>`:''}
       </div>
-      <div class="hd-cgroup">
-        <div class="hd-ctitle">Por modalidad</div>
-        ${porTipo.map(([l,c,k,cl])=>homeBarRow(l,c,tot,k,cl)).join('')}
-      </div>
+      <div class="tl-col-rem">Restante</div>
     </div>
-    <div class="hd-listwrap">
-      <div class="hd-lhead">
-        <span>${lista.length} ${lista.length===1?'formulario':'formularios'}${f?' (filtrado)':''}</span>
-        ${f?'<button type="button" class="hd-clear" id="hdClear">Limpiar filtro</button>':'<a href="#/formularios">Ver todos →</a>'}
-      </div>
-      <div class="hd-list">${lista.slice(0,6).map(x=>`<div class="hd-item">
-        <div class="hd-imain">
-          <div class="hd-itop"><strong>${esc(x.formulario)}</strong><span class="hd-pill ${x.tipo==='Emergencia'?'warn':'info'}">${esc(x.tipo)}</span></div>
-          <div class="hd-isub">${esc(x.proyecto||'General')} · ${esc(x.area||'Sin área')}</div>
+    <div class="tl-rows">${lista.map(p=>{
+      const [,stCls]=PRJ_ESTADOS[p.c.estado];
+      const iniMs=prjDate(p.inicio).getTime(), finMs=prjDate(p.fin).getTime();
+      const leftPct=((iniMs-minMs)/span)*100;
+      const widthPct=Math.max(1.2,((finMs-iniMs)/span)*100);
+      const pct=Math.round(p.c.pct);
+      const restaTxt=p.c.estado==='finalizado'?'Cerrado':p.c.estado==='porIniciar'?`Inicia en ${prjDias(-p.c.trans)}`:p.c.resta===0?'Cierra hoy':`Faltan ${prjDias(p.c.resta)}`;
+      const tip=`${p.nombre} (${p.codigo}) · ${p.tipo}\n${prjFmt(p.inicio)} al ${prjFmt(p.fin)}\nAvance: ${pct}% · ${restaTxt}`;
+      const nomHtml=p.prima
+        ?`<a class="tl-name" href="${esc(p.prima)}" target="_blank" rel="noopener noreferrer" title="Abrir en PRIMA">${esc(p.nombre)}</a>`
+        :`<span class="tl-name">${esc(p.nombre)}</span>`;
+      return `<div class="tl-row${p.c.estado==='finalizado'?' is-done':''}">
+        <div class="tl-info">
+          ${nomHtml}
+          <span class="tl-meta">${esc(p.codigo)} · ${esc(p.tipo)} · ${prjFmt(p.inicio)} – ${prjFmt(p.fin)}</span>
         </div>
-        <div class="hd-iacts"><a class="hd-act" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">Abrir ↗</a></div>
-      </div>`).join('')}</div>
+        <div class="tl-track" title="${esc(tip)}">
+          ${gridHtml}
+          <div class="tl-bar ${stCls}" style="left:${leftPct.toFixed(2)}%;width:${widthPct.toFixed(2)}%">
+            <span class="tl-elapsed" style="width:${p.c.pct.toFixed(1)}%"></span>
+          </div>
+        </div>
+        <div class="tl-rem ${stCls}">
+          <strong>${esc(restaTxt)}</strong>
+          <span>${pct}% transcurrido</span>
+        </div>
+      </div>`;
+    }).join('')}</div>
+    <div class="tl-legend">
+      <span><i class="tl-dot ok"></i>Vigente (transcurrido)</span>
+      <span><i class="tl-dot warn"></i>Por finalizar ≤90d</span>
+      <span><i class="tl-dot rem"></i>Plazo restante</span>
+      <span><i class="tl-dot today"></i>Línea de hoy</span>
+      <a class="tl-all" href="#/proyectos">Ver detalle en Proyectos →</a>
     </div>
   </div>`;
-}
-
-function homeRenderRadar(){
-  const d=homeDatos();
-  const prox=d.activos.slice().sort((a,b)=>a.fin.localeCompare(b.fin)).slice(0,4);
-  if(!prox.length) return '<p class="muted" style="margin:0">No hay proyectos activos registrados.</p>';
-  return `<div class="hr-grid">${prox.map(p=>{
-    const [stTxt,stCls]=PRJ_ESTADOS[p.c.estado];
-    const faltan=p.c.resta===0?'Cierra hoy':`Faltan ${prjDias(p.c.resta)}`;
-    return `<article class="hr-card">
-      <div class="hr-top">
-        <span class="hr-code">${esc(p.codigo)} · ${esc(p.tipo)}</span>
-        <span class="hd-pill ${stCls}">${faltan}</span>
-      </div>
-      <h3>${esc(p.nombre)}</h3>
-      <div class="hr-bar"><span style="width:${p.c.pct.toFixed(1)}%" class="${stCls}"></span></div>
-      <div class="hr-meta">
-        <span>Cierre: <strong>${prjFmt(p.fin)}</strong></span>
-        <span>${Math.round(p.c.pct)}% transcurrido</span>
-      </div>
-    </article>`;
-  }).join('')}</div>`;
 }
 
 function homeBuscar(raw){
@@ -314,30 +214,20 @@ function viewPortada(){
       </a>
     </section>
 
-    <section class="hr-panel" aria-label="Próximos cierres de proyectos">
-      <div class="hr-head">
+    <section class="tl-panel" aria-label="Línea temporal de proyectos">
+      <div class="tl-head">
         <div>
-          <h2 class="p-title" style="margin:0">Próximos cierres de proyectos</h2>
-          <p class="muted" style="margin:2px 0 0;font-size:13.5px">Seguimiento de plazos activos ordenados por fecha de finalización más cercana.</p>
+          <h2 class="p-title" style="margin:0">Línea temporal de proyectos</h2>
+          <p class="muted" style="margin:2px 0 0;font-size:13.5px">Visualización del plazo transcurrido y el tiempo restante hasta el cierre de cada proyecto.</p>
         </div>
-        <a class="hr-more" href="#/proyectos">Ver todos en Proyectos →</a>
-      </div>
-      ${homeRenderRadar()}
-    </section>
-
-    <section class="hd-panel" aria-label="Tablero interactivo">
-      <div class="hd-head">
-        <div>
-          <h2 class="p-title" style="margin:0">Tablero interactivo</h2>
-          <p class="muted" style="margin:2px 0 0;font-size:13.5px">Explora la distribución actual y filtra haciendo clic en cualquier barra.</p>
-        </div>
-        <div class="hd-tabs" role="tablist" aria-label="Vista del tablero">
-          <button type="button" class="hd-tab${HOME_ST.tab==='proyectos'?' on':''}" data-htab="proyectos" role="tab" aria-selected="${HOME_ST.tab==='proyectos'}">Proyectos</button>
-          <button type="button" class="hd-tab${HOME_ST.tab==='tableros'?' on':''}" data-htab="tableros" role="tab" aria-selected="${HOME_ST.tab==='tableros'}">Tableros</button>
-          <button type="button" class="hd-tab${HOME_ST.tab==='formularios'?' on':''}" data-htab="formularios" role="tab" aria-selected="${HOME_ST.tab==='formularios'}">Formularios</button>
+        <div class="tl-tabs" role="tablist" aria-label="Filtrar línea temporal">
+          <button type="button" class="tl-tab${HOME_ST.tl==='activos'?' on':''}" data-tl="activos" role="tab" aria-selected="${HOME_ST.tl==='activos'}">Activos</button>
+          <button type="button" class="tl-tab${HOME_ST.tl==='Emergencia'?' on':''}" data-tl="Emergencia" role="tab" aria-selected="${HOME_ST.tl==='Emergencia'}">Emergencia</button>
+          <button type="button" class="tl-tab${HOME_ST.tl==='Regular'?' on':''}" data-tl="Regular" role="tab" aria-selected="${HOME_ST.tl==='Regular'}">Regular</button>
+          <button type="button" class="tl-tab${HOME_ST.tl==='todos'?' on':''}" data-tl="todos" role="tab" aria-selected="${HOME_ST.tl==='todos'}">Todos</button>
         </div>
       </div>
-      <div id="homeDashBody">${homeRenderDash()}</div>
+      <div id="homeTimelineBody">${homeRenderTimeline()}</div>
     </section>
 
     <section class="pe-panel" aria-label="Enlaces institucionales importantes">
@@ -355,31 +245,17 @@ function viewPortada(){
 }
 
 function bindPortada(){
-  const body=$('#homeDashBody');
-  const bindDash=()=>{
-    if(!body) return;
-    body.querySelectorAll('[data-hfilter]').forEach(b=>b.onclick=()=>{
-      const k=b.dataset.hfilter;
-      HOME_ST.filtro=HOME_ST.filtro===k?'':k;
-      body.innerHTML=homeRenderDash();
-      bindDash();
-    });
-    const clr=$('#hdClear');
-    if(clr) clr.onclick=()=>{ HOME_ST.filtro=''; body.innerHTML=homeRenderDash(); bindDash(); };
-  };
-  bindDash();
-
-  document.querySelectorAll('[data-htab]').forEach(t=>t.onclick=()=>{
-    const tab=t.dataset.htab;
-    if(HOME_ST.tab===tab) return;
-    HOME_ST.tab=tab;
-    HOME_ST.filtro='';
-    document.querySelectorAll('[data-htab]').forEach(x=>{
-      const on=x.dataset.htab===tab;
+  const body=$('#homeTimelineBody');
+  document.querySelectorAll('[data-tl]').forEach(t=>t.onclick=()=>{
+    const tl=t.dataset.tl;
+    if(HOME_ST.tl===tl) return;
+    HOME_ST.tl=tl;
+    document.querySelectorAll('[data-tl]').forEach(x=>{
+      const on=x.dataset.tl===tl;
       x.classList.toggle('on',on);
       x.setAttribute('aria-selected',on?'true':'false');
     });
-    if(body){ body.innerHTML=homeRenderDash(); bindDash(); }
+    if(body) body.innerHTML=homeRenderTimeline();
   });
 
   const inp=$('#homeSearch'), drop=$('#homeSearchDrop'), clr=$('#homeSearchClr');

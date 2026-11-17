@@ -1,4 +1,4 @@
-/* Herramientas M&E · Catálogo de herramientas y novedades.
+/* Herramientas M&E · Catálogo de herramientas.
    Para incorporar una herramienta nueva: agrega una entrada aquí y, cuando esté lista,
    cambia su estado a 'disponible'. `vista` y `enlazar` son las funciones que dibujan la página
    (las herramientas sin `vista` propia, como el Depurador IMS, se conectan en navegacion.js).
