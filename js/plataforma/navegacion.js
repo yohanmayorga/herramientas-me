@@ -83,7 +83,9 @@ function navRoute(){
     if(rawPath==='index.html') rawPath='';
   }
   const parts=(rawPath||'inicio').split('/');
-  let ruta=parts[0]; if(ruta!=='inicio'&&!HERRAMIENTAS.some(h=>h.id===ruta)) ruta='inicio';
+  let ruta=parts[0];
+  if(ruta==='apis') ruta='formularios';
+  if(ruta!=='inicio'&&!HERRAMIENTAS.some(h=>h.id===ruta)) ruta='inicio';
   if(ruta==='depurador-ims'&&parts[1]){ // accesos directos desde la portada
     if(parts[1]==='guia') S.guide=true;
     else { S.guide=false; S.dash=false; if(S.step===1) S.loadMode=parts[1]==='multiple'?'multi':'single'; }

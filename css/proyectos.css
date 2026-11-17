@@ -82,15 +82,23 @@
 .pj-empty{text-align:center;color:var(--ink-2);padding:32px}
 
 /* Vista en lista */
-.pj-tbl-wrap{border-radius:12px;overflow-x:auto}
-.pj-tbl{width:100%;font-size:13px;table-layout:auto}
-.pj-tbl th,.pj-tbl td{padding:9px 10px;white-space:normal}
-.pj-tbl th{white-space:nowrap;font-size:12.5px}
+.pj-tbl-wrap{border-radius:12px;overflow-x:auto;border:1px solid var(--line);background:var(--surface)}
+.pj-tbl{width:100%;font-size:13px;table-layout:auto;border-collapse:collapse}
+.pj-tbl th,.pj-tbl td{padding:10px 12px;white-space:normal;border-bottom:1px solid var(--line)}
+.pj-tbl tbody tr:last-child td{border-bottom:0}
+.pj-tbl th{white-space:nowrap;font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-2);background:var(--surface-2)}
 .pj-tbl td.num,.pj-tbl td.pj-tdates,.pj-tbl td.pj-trem{white-space:nowrap}
-.pj-tbl tbody tr:hover{background:var(--surface-2)}
-.pj-tn{font-weight:600;font-size:13.5px;color:var(--ink);line-height:1.25}
+.pj-tbl tbody tr:nth-child(even){background:rgba(15,23,42,.028)}
+.pj-tbl tbody tr:hover{background:rgba(15,23,42,.055)}
+:root[data-theme="dark"] .pj-tbl tbody tr:nth-child(even){background:rgba(255,255,255,.032)}
+:root[data-theme="dark"] .pj-tbl tbody tr:hover{background:rgba(255,255,255,.065)}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .pj-tbl tbody tr:nth-child(even){background:rgba(255,255,255,.032)}
+  :root:not([data-theme="light"]) .pj-tbl tbody tr:hover{background:rgba(255,255,255,.065)}
+}
+.pj-tn{font-weight:600;font-size:13.5px;color:var(--ink);line-height:1.3}
 .pj-tbl .pj-code{font-size:12px}
-.pj-tbl .pj-tipo,.pj-tbl .pj-st{font-size:11.5px;padding:2px 8px;white-space:nowrap}
+.pj-tbl .pj-tipo,.pj-tbl .pj-st{font-size:11.5px;padding:3px 9px;white-space:nowrap}
 .pj-tdates{font-variant-numeric:tabular-nums;font-size:12.5px;line-height:1.25}
 .pj-tdates small{color:var(--ink-2);font-size:11.5px}
 .pj-tprog{width:155px;min-width:140px}
@@ -100,8 +108,11 @@
 .pj-tprog .pj-pf{margin-top:4px}
 .pj-trem .pj-rv{font-size:13.5px;margin:0 0 1px}
 .pj-trem .pj-rs{font-size:11px}
-.pj-tlinks{display:flex;gap:5px;flex-wrap:nowrap}
-.pj-tlinks .pj-link{padding:5px 7px;font-size:12px;gap:4px;white-space:nowrap}
+.pj-tlinks{display:flex;gap:6px;flex-wrap:nowrap}
+.pj-tlinks .pj-link{padding:5px 8px;font-size:12px;gap:4px;white-space:nowrap;color:var(--ink)}
+.pj-tlinks .pj-link:hover{color:var(--accent)}
+.pj-tlinks .pj-link.primary{color:var(--accent-ink)}
+.pj-tlinks .pj-link.primary:hover{color:var(--accent-ink)}
 .pj-tlinks .pj-link svg{width:14px;height:14px}
 
 @media (max-width:1160px), (max-height:600px) and (orientation:landscape){

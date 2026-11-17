@@ -162,7 +162,7 @@ function homeBuscar(raw){
   });
   (typeof FORMULARIOS!=='undefined'?FORMULARIOS:[]).forEach(f=>{
     if(prjNorm(`${f.formulario} ${f.proyecto} ${f.area}`).includes(q))
-      res.push({cat:'Formulario',titulo:f.formulario,sub:`${f.proyecto||'General'} · ${f.area||'Kobo'}`,href:f.url,ext:true});
+      res.push({cat:'Formulario',titulo:f.formulario,sub:`${f.proyecto||'General'} · ${f.area||'Kobo'}`,href:f.url||'/formularios',ext:Boolean(f.url)});
   });
   if(!res.length) return `<div class="hs-empty">Sin coincidencias para «${esc(raw.trim())}».</div>`;
   return res.slice(0,9).map(r=>`<a class="hs-row" href="${esc(r.href)}"${r.ext?' target="_blank" rel="noopener noreferrer"':''}>
