@@ -7,6 +7,8 @@ const MMAT = {
   imsDet: '',    // tipo detectado automáticamente
   imsObj: null,  // objeto cargado (nfi/wash/sal/com)
   imsSector: '', // sector configurable para salud/mental/proteccion/psicosocial
+  imsProjCol: null, // { label, nonEmpty, total, samples } si el Excel IMS tiene columna de proyecto con datos
+  imsUseProjCol: false, // null = pendiente de respuesta, true = extraer de columna, false = otro criterio
   nfi: null,
   raw: null,     // { headers, selectHeaders, rows, sheet, linkedInfo, sig } para Kobo / Excel
   map: {},       // mapeo de columnas para Kobo / Excel
@@ -21,7 +23,7 @@ const MMAT = {
   excelAgeMax: 74,
   excelSexMode: '', // '' | 'random' | 'equal' | 'all_f' | 'all_m' | 'maj_f' | 'maj_m'
   excelGeo: { estado:'', mun:'', parr:'', com:'', comCustom:'' },
-  defProj: 'DHR Emergencia',
+  defProj: '',
   defProjOtro: '',
   defSector: 'NFI',
   validSocios: new Set(),
@@ -1067,11 +1069,14 @@ function mmComputeImsKits(N){
     const items = a.items.filter(it => F.kcat.has(N.cat[it.ki]));
     if(!items.length){ omitSinKits++; return; }
 
+    const defP = MMAT.defProj === 'Otro' ? (MMAT.defProjOtro.trim() || 'Otro') : (MMAT.defProj || '');
+    const rowProj = MMAT.imsUseProjCol ? mmMapProjName(a._colProyecto) : '';
     const slices = new Map();
     items.forEach(it => {
       const sec = N.cat[it.ki] === 'WASH' ? 'WASH' : 'NFI';
-      const mp = N.matProj && N.matProj[it.ki] ? N.matProj[it.ki] : 'DHR Emergencia';
-      const proj = mp === 'Otro' ? ((N.matProjOtro && N.matProjOtro[it.ki] || '').trim() || 'Otro') : mp;
+      const mp = N.matProj && N.matProj[it.ki] !== undefined ? N.matProj[it.ki] : '';
+      const kitProj = mp === 'Otro' ? ((N.matProjOtro && N.matProjOtro[it.ki] || '').trim() || 'Otro') : mp;
+      const proj = MMAT.imsUseProjCol ? (rowProj || defP) : kitProj;
       const sk = `${proj}|${sec}`;
       slices.set(sk, { proj, sec, q: (slices.get(sk)?.q || 0) + it.q });
     });
@@ -1120,7 +1125,7 @@ function mmComputeImsKits(N){
 function mmComputeImsSal(t, A){
   const seen = new Set(), grpMap = new Map(), adjSeen = new Set(), ajustes = [];
   let omitSocio = 0, omitFecha = 0;
-  const defP = MMAT.defProj === 'Otro' ? (MMAT.defProjOtro.trim() || 'Otro') : MMAT.defProj;
+  const defP = MMAT.defProj === 'Otro' ? (MMAT.defProjOtro.trim() || 'Otro') : (MMAT.defProj || '');
   const sector = MMAT.imsSector || IMS_DEF_SECTOR[t] || 'Salud';
   const sorted = A.rows.slice().sort((a, b) => (a.fecha || '').localeCompare(b.fecha || '') || a.n - b.n);
 
@@ -1128,7 +1133,8 @@ function mmComputeImsSal(t, A){
     if(!A.valid.has(fold(a.socio || '(vacío)'))){ omitSocio++; return; }
     if((MMAT.from || MMAT.to) && (!a.fecha || (MMAT.from && a.fecha < MMAT.from) || (MMAT.to && a.fecha > MMAT.to))){ omitFecha++; return; }
 
-    const proj = mmMapProjName(a.proyecto) || defP;
+    const rawProj = MMAT.imsUseProjCol ? (a._colProyecto || a.proyecto) : '';
+    const proj = mmMapProjName(rawProj) || defP;
     const pk = a.p && a.p.pid ? `id:${a.p.pid}` : a.pkey;
     const rec = pk && seen.has(pk) ? 'SÍ' : 'NO';
     if(pk) seen.add(pk);
@@ -1166,7 +1172,7 @@ function mmComputeImsSal(t, A){
 function mmComputeImsCom(C){
   const grpMap = new Map();
   let omitTipo = 0, omitSocio = 0, omitFecha = 0, omitCero = 0;
-  const defP = MMAT.defProj === 'Otro' ? (MMAT.defProjOtro.trim() || 'Otro') : MMAT.defProj;
+  const defP = MMAT.defProj === 'Otro' ? (MMAT.defProjOtro.trim() || 'Otro') : (MMAT.defProj || '');
   const secMap = { proteccion:'Protección', salud:'SMAPS', wash:'WASH' };
 
   C.rows.forEach(a => {
@@ -1176,7 +1182,8 @@ function mmComputeImsCom(C){
     const tot = (a.ninas||0)+(a.ninos||0)+(a.mujeres||0)+(a.hombres||0)+(a.mujeres60||0)+(a.hombres60||0);
     if(!tot){ omitCero++; return; }
 
-    const proj = mmMapProjName(a.proyecto) || defP;
+    const rawProj = MMAT.imsUseProjCol ? (a._colProyecto || a.proyecto) : '';
+    const proj = mmMapProjName(rawProj) || defP;
     const sector = secMap[a.type] || 'Protección';
     const rec = fold(a.recurr) === 'si' ? 'SÍ' : 'NO';
     const k = [a.fecha || '', proj, a.socio || '', a.estado || '', a.municipio || '', a.parroquia || '', a.comunidad || '', sector, rec].join('|');
@@ -1456,32 +1463,72 @@ function viewMatrizMonitoreo(){
       if(O && O.fatal && O.fatal.length){
         body += `<div class="note bad">Faltan columnas necesarias en el archivo del IMS: ${esc(O.fatal.join(', '))}. Verifica que el tipo de formulario seleccionado sea el correcto.</div>`;
       } else if(O && O.rows){
-        if(MMAT.imsType === 'nfi' || MMAT.imsType === 'wash'){
-          const kitRows = O.kits.map((k, i) => ({ k, i })).filter(x => x.k.total > 0).sort((a, b) => b.k.total - a.k.total).map(({ k, i }) => {
+        const imsProjOptsHtml = val => [['', '— Dejar en blanco —'], ...MAT_PROJS.map(p => [p, p])]
+          .map(([v, l]) => `<option value="${esc(v)}"${val === v ? ' selected' : ''}>${esc(l)}</option>`).join('');
+
+        if(MMAT.imsProjCol){
+          const pc = MMAT.imsProjCol;
+          body += `<div class="panel" style="margin-bottom:14px;border-left:4px solid var(--pri,#0033a0)">
+            <div class="pj-fl" style="margin-bottom:4px">Columna de proyecto detectada en el Excel</div>
+            <p style="margin:0 0 10px;font-size:13.5px">
+              Se identificó la columna <b>«${esc(pc.label)}»</b> (${fmt(pc.nonEmpty)} de ${fmt(pc.total)} registros con dato${pc.samples.length ? `; ej.: ${pc.samples.map(esc).join(', ')}` : ''}).
+              ¿Esta columna será de donde se extraerá la información del proyecto?
+            </p>
+            <div class="row" style="gap:8px;flex-wrap:wrap">
+              <button type="button" class="btn ${MMAT.imsUseProjCol === true ? 'primary' : ''}" data-mmuseprojcol="yes">Sí, extraer de esta columna</button>
+              <button type="button" class="btn ${MMAT.imsUseProjCol === false ? 'primary' : ''}" data-mmuseprojcol="no">No, usar otro criterio</button>
+            </div>
+          </div>`;
+        }
+
+        const projPending = !!(MMAT.imsProjCol && MMAT.imsUseProjCol === null);
+        const needFallback = !MMAT.imsUseProjCol || (MMAT.imsProjCol && MMAT.imsProjCol.nonEmpty < MMAT.imsProjCol.total);
+        const fallbackLabel = MMAT.imsUseProjCol
+          ? 'Proyecto para filas con la columna en blanco (opcional)'
+          : 'Proyecto (especificar o dejar en blanco)';
+        const defProjHtml = needFallback
+          ? `<label class="pj-fg" style="max-width:340px"><span class="pj-fl">${fallbackLabel}</span>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <select class="in" id="mmDefProj">${imsProjOptsHtml(MMAT.defProj)}</select>
+                <input type="text" class="in" id="mmDefProjOtro" value="${esc(MMAT.defProjOtro)}" placeholder="Escribir proyecto…" style="min-width:140px;${MMAT.defProj === 'Otro' ? '' : 'display:none'}">
+              </div>
+            </label>`
+          : `<div class="pj-fg"><span class="pj-fl">Proyecto</span><div class="muted" style="font-size:13.5px;padding-top:6px">Se extraerá de la columna <b>«${esc(MMAT.imsProjCol.label)}»</b>.</div></div>`;
+
+        if(projPending){
+          body += `<div class="note warn" style="margin-bottom:14px">Responde arriba si deseas extraer el proyecto desde la columna <b>«${esc(MMAT.imsProjCol.label)}»</b> para continuar con la configuración.</div>`;
+        } else if(MMAT.imsType === 'nfi' || MMAT.imsType === 'wash'){
+          const activeKits = O.kits.map((k, i) => ({ k, i })).filter(x => x.k.total > 0).sort((a, b) => b.k.total - a.k.total);
+          const unmappedCount = activeKits.filter(({ i }) => !O.matProj[i]).length;
+          const kitRows = activeKits.map(({ k, i }) => {
+            const projCell = MMAT.imsUseProjCol
+              ? `<td><span class="muted" style="font-size:13px">Según columna «${esc(MMAT.imsProjCol.label)}»</span></td>`
+              : `<td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                <select class="in" data-mmproj="${i}">${imsProjOptsHtml(O.matProj[i] || '')}</select>
+                <input type="text" class="in" data-mmproj-otro="${i}" value="${esc(O.matProjOtro[i] || '')}" placeholder="Escribir proyecto…" style="min-width:140px;${O.matProj[i] === 'Otro' ? '' : 'display:none'}">
+              </div></td>`;
             return `<tr>
               <td style="white-space:normal">${esc(k.name)}</td>
               <td class="num">${fmt(k.total)}</td>
-              <td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-                <select class="in" data-mmproj="${i}">${MAT_PROJS.map(p => `<option ${O.matProj[i] === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
-                <input type="text" class="in" data-mmproj-otro="${i}" value="${esc(O.matProjOtro[i] || '')}" placeholder="Escribir proyecto…" style="min-width:140px;${O.matProj[i] === 'Otro' ? '' : 'display:none'}">
-              </div></td>
-              <td><select class="in kitcat kitcat-${O.cat[i].toLowerCase()}" data-mmcat="${i}">${['NFI','WASH'].map(c => `<option ${O.cat[i] === c ? 'selected' : ''}>${c}</option>`).join('')}</select></td>
+              ${projCell}
+              <td><select class="in kitcat kitcat-${O.cat[i].toLowerCase()}" data-mmcat="${i}">${['NFI','WASH','Otro'].map(c => `<option ${O.cat[i] === c ? 'selected' : ''}>${c}</option>`).join('')}</select></td>
             </tr>`;
           }).join('');
+          const kitProjNote = MMAT.imsUseProjCol
+            ? `El proyecto se extraerá de la columna <b>«${esc(MMAT.imsProjCol.label)}»</b>.`
+            : unmappedCount > 0
+              ? `Se identificó el proyecto por el nombre del kit cuando fue posible (ECHO → <b>ECHO ALERT</b>, DHR/US → <b>DHR Emergencia</b>). En ${fmt(unmappedCount)} kit(s) sin proyecto en el nombre se dejó en blanco; puedes especificarlo en la tabla o dejarlo en blanco.`
+              : `Los proyectos se identificaron automáticamente a partir del nombre de cada kit (ECHO → <b>ECHO ALERT</b>, DHR/US → <b>DHR Emergencia</b>).`;
           body += `<h2>Configuración de kits (NFI / WASH) y Proyecto</h2>
           <div class="panel">
-            <p class="muted" style="margin:0 0 10px;font-size:13.5px">${esc(O.cfg.catNote)} Los kits que mencionan ECHO se asignan por defecto a <b>ECHO ALERT</b> y el resto a <b>DHR Emergencia</b>.</p>
+            <p class="muted" style="margin:0 0 10px;font-size:13.5px">${esc(O.cfg.catNote)} ${kitProjNote}</p>
+            ${MMAT.imsUseProjCol && MMAT.imsProjCol.nonEmpty < MMAT.imsProjCol.total ? `<div style="margin-bottom:12px">${defProjHtml}</div>` : ''}
             <div class="scroll"><table class="kits"><thead><tr><th>Kit</th><th class="num">Cantidad</th><th>Proyecto</th><th>Tipo</th></tr></thead><tbody>${kitRows}</tbody></table></div>
           </div>`;
         } else if(MMAT.imsType === 'comunitarias'){
           body += `<h2>Configuración de Actividades comunitarias</h2>
           <div class="panel" style="margin-bottom:14px">
-            <label class="pj-fg" style="max-width:340px;margin-bottom:12px"><span class="pj-fl">Proyecto por defecto (si falta en el registro)</span>
-              <div style="display:flex;gap:6px;flex-wrap:wrap">
-                <select class="in" id="mmDefProj">${MAT_PROJS.map(p => `<option ${MMAT.defProj === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
-                <input type="text" class="in" id="mmDefProjOtro" value="${esc(MMAT.defProjOtro)}" placeholder="Escribir proyecto…" style="min-width:140px;${MMAT.defProj === 'Otro' ? '' : 'display:none'}">
-              </div>
-            </label>
+            <div style="margin-bottom:12px">${defProjHtml}</div>
             <p class="muted" style="margin:0 0 6px;font-size:13.5px">Tipos de actividad a incluir:</p>
             ${O.types.map(tp => `<label class="check"><input type="checkbox" data-mmcomt="${tp.id}" ${O.sel.has(tp.id) ? 'checked' : ''}> ${esc(tp.label)} <span class="muted">(${fmt(tp.count)} actividades)</span></label>`).join('')}
           </div>`;
@@ -1490,12 +1537,7 @@ function viewMatrizMonitoreo(){
           body += `<h2>Configuración de ${esc(O.cfg.name)}</h2>
           <div class="panel" style="margin-bottom:14px">
             <div class="grid2" style="gap:12px">
-              <label class="pj-fg"><span class="pj-fl">Proyecto por defecto (si falta columna)</span>
-                <div style="display:flex;gap:6px;flex-wrap:wrap">
-                  <select class="in" id="mmDefProj">${MAT_PROJS.map(p => `<option ${MMAT.defProj === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
-                  <input type="text" class="in" id="mmDefProjOtro" value="${esc(MMAT.defProjOtro)}" placeholder="Escribir proyecto…" style="min-width:140px;${MMAT.defProj === 'Otro' ? '' : 'display:none'}">
-                </div>
-              </label>
+              ${defProjHtml}
               <label class="pj-fg"><span class="pj-fl">Sector en la Matriz</span>
                 <select class="in" id="mmImsSector">${secOpts.map(s => `<option ${MMAT.imsSector === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
               </label>
@@ -1676,11 +1718,7 @@ function viewMatrizMonitoreo(){
     </div>`;
   }
 
-  const res = (MMAT.source === 'kobo' && !MMAT.koboReady)
-    ? null
-    : (MMAT.source === 'excel' && (!MMAT.excelReady || !excelVal || !excelVal.ok))
-      ? null
-      : mmComputeActive();
+  const res = mmReadyForCompute(excelVal) ? mmComputeActive() : null;
   const hasOutput = res && res.outRows.length > 0;
   const hasAdj = (MMAT.source === 'ims' || MMAT.source === 'kobo' || MMAT.source === 'excel') && res && res.ajustes && res.ajustes.length > 0;
 
@@ -1745,13 +1783,16 @@ function viewMatrizMonitoreo(){
   </div>`;
 }
 
+function mmReadyForCompute(excelVal){
+  if(MMAT.source === 'ims') return !(MMAT.imsProjCol && MMAT.imsUseProjCol === null);
+  if(MMAT.source === 'kobo') return !!MMAT.koboReady;
+  if(MMAT.source === 'excel') return !!(MMAT.excelReady && excelVal && excelVal.ok);
+  return true;
+}
+
 function mmRefreshOutput(){
   const excelVal = MMAT.source === 'excel' && MMAT.raw ? mmExcelValidation() : null;
-  const res = (MMAT.source === 'kobo' && !MMAT.koboReady)
-    ? null
-    : (MMAT.source === 'excel' && (!MMAT.excelReady || !excelVal || !excelVal.ok))
-      ? null
-      : mmComputeActive();
+  const res = mmReadyForCompute(excelVal) ? mmComputeActive() : null;
   const hasOutput = res && res.outRows.length > 0;
   const exBtn = $('#mmExportBtn'), adjBtn = $('#mmExportAdj');
   if(exBtn) exBtn.disabled = !hasOutput;
@@ -1761,17 +1802,97 @@ function mmRefreshOutput(){
   }
 }
 
+function mmGetImsSheetName(wb, t, obj){
+  if(obj && obj.sheet && wb.Sheets[obj.sheet]) return obj.sheet;
+  if(t === 'nfi' || t === 'wash'){
+    const d = typeof kitsSheet === 'function' ? kitsSheet(wb) : null;
+    if(d && d.sheet && wb.Sheets[d.sheet]) return d.sheet;
+  } else if(t === 'comunitarias'){
+    const s = typeof comSheetName === 'function' ? comSheetName(wb) : null;
+    if(s && wb.Sheets[s]) return s;
+  } else {
+    const d = typeof attSheet === 'function' ? attSheet(wb) : null;
+    if(d && d.sheet && wb.Sheets[d.sheet]) return d.sheet;
+  }
+  return wb.SheetNames[0];
+}
+
+function mmInspectImsProjCol(wb, t, obj){
+  if(!wb || !obj || !obj.rows || !obj.rows.length) return null;
+  const sn = mmGetImsSheetName(wb, t, obj);
+  const ws = wb.Sheets[sn];
+  if(!ws) return null;
+  const sh = imsSheet(ws);
+  const machTargets = ['proyecto', 'proyectos', 'projects_vzl', 'project'];
+  const labTargets = new Set(['proyecto', 'proyectos', 'project', 'proyecto columna 2']);
+  const idxs = [];
+  machTargets.forEach(m => {
+    const i = sh.machine.indexOf(m);
+    if(i >= 0 && !idxs.includes(i)) idxs.push(i);
+  });
+  sh.labels.forEach((l, i) => {
+    if(labTargets.has(fold(l)) && !idxs.includes(i)) idxs.push(i);
+  });
+  if(!idxs.length) return null;
+
+  const byRow = new Map();
+  sh.rows.forEach(x => {
+    let val = '';
+    for(const i of idxs){
+      const v = toText(x.r[i]);
+      if(v){ val = v; break; }
+    }
+    byRow.set(x.n, val);
+  });
+
+  let nonEmpty = 0;
+  const sampleSet = new Set();
+  obj.rows.forEach(a => {
+    const v = byRow.get(a.n) || toText(a.proyecto) || '';
+    a._colProyecto = v;
+    if(v){
+      nonEmpty++;
+      if(sampleSet.size < 4) sampleSet.add(mmMapProjName(v) || v);
+    }
+  });
+  if(!nonEmpty) return null;
+  const primaryIdx = idxs.find(i => sh.rows.some(x => toText(x.r[i]))) ?? idxs[0];
+  return {
+    label: sh.labels[primaryIdx] || sh.machine[primaryIdx] || 'Proyecto',
+    nonEmpty,
+    total: obj.rows.length,
+    samples: [...sampleSet]
+  };
+}
+
+function mmKitNameProj(k){
+  const p = kitNameProject(`${k.name || ''} ${k.label || ''}`);
+  if(p === 'ECHO') return 'ECHO ALERT';
+  if(p === 'DHR') return 'DHR Emergencia';
+  return '';
+}
+
 function mmApplyImsType(t){
   MMAT.imsType = t;
   MMAT.imsObj = null;
   MMAT.imsSector = IMS_DEF_SECTOR[t] || '';
+  MMAT.imsProjCol = null;
+  MMAT.imsUseProjCol = false;
+  MMAT.defProj = '';
+  MMAT.defProjOtro = '';
   if(!MMAT.wb || !t) return;
   try{
     let obj = null;
     if(t === 'comunitarias') obj = comLoad(MMAT.wb, MMAT.file.name);
     else if(t === 'nfi' || t === 'wash') obj = nfiLoad(MMAT.wb, MMAT.file.name, S.registro || null, t);
     else obj = salLoad(MMAT.wb, MMAT.file.name, S.registro || null, t);
+    if(obj && (t === 'nfi' || t === 'wash') && Array.isArray(obj.kits)){
+      obj.matProj = obj.kits.map(k => mmKitNameProj(k));
+      obj.matProjOtro = obj.kits.map(() => '');
+    }
     MMAT.imsObj = obj;
+    MMAT.imsProjCol = mmInspectImsProjCol(MMAT.wb, t, obj);
+    MMAT.imsUseProjCol = MMAT.imsProjCol ? null : false;
     MMAT.minDate = obj && obj.minDate ? obj.minDate : '';
     MMAT.maxDate = obj && obj.maxDate ? obj.maxDate : '';
     MMAT.from = MMAT.minDate;
@@ -1863,6 +1984,8 @@ function bindMatrizMonitoreo(){
   document.querySelectorAll('[data-msrc]').forEach(b => b.onclick = () => {
     MMAT.source = b.dataset.msrc;
     MMAT.file = null; MMAT.wb = null; MMAT.imsType = ''; MMAT.imsDet = ''; MMAT.imsObj = null; MMAT.raw = null;
+    MMAT.imsProjCol = null;
+    MMAT.imsUseProjCol = false;
     MMAT.xlsform = null;
     MMAT.koboReady = false;
     MMAT.excelReady = false;
@@ -1872,7 +1995,8 @@ function bindMatrizMonitoreo(){
     MMAT.excelAgeMax = 74;
     MMAT.excelSexMode = '';
     MMAT.excelGeo = { estado:'', mun:'', parr:'', com:'', comCustom:'' };
-    MMAT.defProj = MMAT.source === 'ims' ? 'DHR Emergencia' : '';
+    MMAT.defProj = '';
+    MMAT.defProjOtro = '';
     MMAT.defSector = MMAT.source === 'ims' ? 'NFI' : '';
     navApply();
   });
@@ -1951,6 +2075,10 @@ function bindMatrizMonitoreo(){
 
   if(MMAT.source === 'ims' && MMAT.imsObj){
     const O = MMAT.imsObj;
+    document.querySelectorAll('[data-mmuseprojcol]').forEach(b => b.onclick = () => {
+      MMAT.imsUseProjCol = b.dataset.mmuseprojcol === 'yes';
+      navKeepScroll();
+    });
     if(MMAT.imsType === 'nfi' || MMAT.imsType === 'wash'){
       document.querySelectorAll('[data-mmproj]').forEach(sel => sel.onchange = () => {
         const i = +sel.dataset.mmproj; O.matProj[i] = sel.value;
