@@ -168,5 +168,17 @@ const TABLEROS=[
     frecuencia:'Una vez al día',
     descripcion:'Proyecto DHR regular (consolidado general). Tablero activo con actualización automática una vez al día.',
     url:'https://app.powerbi.com/view?r=eyJrIjoiNGM0NWNiM2ItZDhhNy00MDdjLWIwMGItODVjNmU3ZjVhYTgwIiwidCI6IjE1ODgyNjJkLTIzZmItNDNiNC1iZDZlLWJjZTQ5YzhlNjE4NiIsImMiOjh9'
+  },
+  {
+    nombre:'Matriz Global de Monitoreo',
+    proyecto:'Varios',
+    tipo:'Regular',
+    alcance:'General',
+    socio:'Consolidado general',
+    estado:'Activo',
+    actualizacion:'Automática',
+    frecuencia:'Dos veces al día',
+    descripcion:'Tablero general de la Matriz Global de Monitoreo (varios proyectos). Tablero activo con actualización automática dos veces al día.',
+    url:'https://app.powerbi.com/view?r=eyJrIjoiM2RhZDVkMTQtZDgxMi00NjAxLTkxOTgtN2YyMmU5MjBmNTg5IiwidCI6IjE1ODgyNjJkLTIzZmItNDNiNC1iZDZlLWJjZTQ5YzhlNjE4NiIsImMiOjh9'
   }
 ];
