@@ -32,9 +32,9 @@ const FORMULARIOS=[
     area:'Varias',
     formulario:'Registro de Asistencia en CAT-PAM-EAS V4',
     tipo:'Regular',
-    url:'https://ee.kobo.iom.int/x/DpylznVZ',
-    csv:'https://kf.kobo.iom.int/api/v2/assets/aKZDcHdHpZHYcTFuU8xYha/export-settings/esLhuRat3wKCEUhLymu92F7/data.csv',
-    xlsx:'https://kf.kobo.iom.int/api/v2/assets/aKZDcHdHpZHYcTFuU8xYha/export-settings/esLhuRat3wKCEUhLymu92F7/data.xlsx'
+    url:'https://ee.kobo.iom.int/x/Omcy4nGl',
+    csv:'https://kf.kobo.iom.int/api/v2/assets/amVZURJTA8NkXYPW4CbeNu/export-settings/esDdhTdWixV3rshoJasUePu/data.csv',
+    xlsx:'https://kf.kobo.iom.int/api/v2/assets/amVZURJTA8NkXYPW4CbeNu/export-settings/esDdhTdWixV3rshoJasUePu/data.xlsx'
   },
   {
     proyecto:'JAPÓN',

@@ -34,8 +34,8 @@ const APIS=[
   {
     proyecto:'ECHO',
     formulario:'Registro de Asistencia en CAT-PAM-EAS V4',
-    csv:'https://kf.kobo.iom.int/api/v2/assets/aKZDcHdHpZHYcTFuU8xYha/export-settings/esLhuRat3wKCEUhLymu92F7/data.csv',
-    xlsx:'https://kf.kobo.iom.int/api/v2/assets/aKZDcHdHpZHYcTFuU8xYha/export-settings/esLhuRat3wKCEUhLymu92F7/data.xlsx'
+    csv:'https://kf.kobo.iom.int/api/v2/assets/amVZURJTA8NkXYPW4CbeNu/export-settings/esDdhTdWixV3rshoJasUePu/data.csv',
+    xlsx:'https://kf.kobo.iom.int/api/v2/assets/amVZURJTA8NkXYPW4CbeNu/export-settings/esDdhTdWixV3rshoJasUePu/data.xlsx'
   },
   {
     proyecto:'',
