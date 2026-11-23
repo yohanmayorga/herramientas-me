@@ -13,8 +13,16 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script>
-  window.APP_VERSION='2026.11.22.2';
-  window.SITE_MAINTENANCE=true;
+  // =========================================================================
+  // MODO EN CONSTRUCCIÓN (cambia entre true y false para ocultar o publicar)
+  //   true  = Muestra "Sitio en construcción" en la web publicada (en local sigue activa)
+  //   false = Web publicada activa normalmente
+  // =========================================================================
+  var EN_CONSTRUCCION = true;
+
+  window.APP_VERSION='2026.11.23.2';
+  var isLocal=location.protocol==='file:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'||location.hostname==='::1'||location.hostname==='[::1]';
+  window.SITE_MAINTENANCE=EN_CONSTRUCCION&&!isLocal;
   window.withAppVersion=function(u){ return u+(u.indexOf('?')===-1?'?':'&')+'v='+encodeURIComponent(window.APP_VERSION); };
   if(window.SITE_MAINTENANCE){
     document.documentElement.classList.add('en-construccion');
