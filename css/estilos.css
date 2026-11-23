@@ -381,3 +381,22 @@ details.fsec[open] summary::after{transform:rotate(180deg)}
   .dlg-f .btn{flex:1;justify-content:center}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ============ Modo en construcción ============ */
+html:not(.en-construccion) .construccion{display:none!important}
+html.en-construccion body{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+html.en-construccion .top,
+html.en-construccion .shell,
+html.en-construccion .credit,
+html.en-construccion dialog,
+html.en-construccion #toast,
+html.en-construccion #busy{display:none!important}
+.construccion{width:100%;max-width:520px;background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--accent);border-radius:16px;padding:36px 28px;text-align:center;box-shadow:0 12px 32px rgba(20,34,61,.08)}
+:root[data-theme="dark"] .construccion{box-shadow:0 12px 32px rgba(0,0,0,.35)}
+.construccion-brand{display:inline-flex;align-items:center;gap:12px;margin-bottom:20px;text-align:left}
+.construccion-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;background:var(--warn-soft);color:var(--warn);font-size:12px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;margin-bottom:14px}
+.construccion h1{margin:0 0 10px;font-size:24px;line-height:1.25;letter-spacing:-.01em}
+.construccion p{margin:0 0 18px;color:var(--ink-2);font-size:15px}
+.construccion-foot{margin-top:20px;padding-top:16px;border-top:1px solid var(--line);font-size:13px;color:var(--ink-2)}
+.construccion-foot a{color:var(--accent);text-decoration:none}
+.construccion-foot a:hover{text-decoration:underline}
