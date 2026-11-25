@@ -20,7 +20,7 @@
   // =========================================================================
   var EN_CONSTRUCCION = true;
 
-  window.APP_VERSION='2026.11.23.2';
+  window.APP_VERSION='2026.11.25.4';
   var isLocal=location.protocol==='file:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'||location.hostname==='::1'||location.hostname==='[::1]';
   window.SITE_MAINTENANCE=EN_CONSTRUCCION&&!isLocal;
   window.withAppVersion=function(u){ return u+(u.indexOf('?')===-1?'?':'&')+'v='+encodeURIComponent(window.APP_VERSION); };

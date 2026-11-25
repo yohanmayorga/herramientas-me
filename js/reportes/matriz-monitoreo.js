@@ -9,6 +9,8 @@ const MMAT = {
   imsSector: '', // sector configurable para salud/mental/proteccion/psicosocial
   imsProjCol: null, // { label, nonEmpty, total, samples } si el Excel IMS tiene columna de proyecto con datos
   imsUseProjCol: false, // null = pendiente de respuesta, true = extraer de columna, false = otro criterio
+  imsScope: null, // null = pendiente de respuesta, 'general' = General (100%), 'echo25' = ECHO Alert (25%)
+  imsRegFilter: null, // null = pendiente (solo para registro), 'all' = Toda la data, 'alojamientos' = Solo alojamientos
   nfi: null,
   raw: null,     // { headers, selectHeaders, rows, sheet, linkedInfo, sig } para Kobo / Excel
   map: {},       // mapeo de columnas para Kobo / Excel
@@ -35,6 +37,7 @@ const MMAT = {
 };
 
 const IMS_FORM_OPTS = [
+  ['registro','Registro de Familias'],
   ['nfi','Entrega de kits NFI'],
   ['wash','Entrega de kits y servicios WASH'],
   ['salud','Atenciones en salud'],
@@ -43,7 +46,20 @@ const IMS_FORM_OPTS = [
   ['psicosocial','Atenciones psicosociales (Protección)'],
   ['comunitarias','Actividades comunitarias']
 ];
-const IMS_DEF_SECTOR = { salud:'Salud', mental:'SMAPS', proteccion:'Protección', psicosocial:'Protección' };
+const IMS_DEF_SECTOR = { registro:'Alojamiento', salud:'Salud', mental:'SMAPS', proteccion:'Protección', psicosocial:'Protección' };
+const IMS_REG_ALOJ_GEO = [
+  { nombre: 'Estadio César Nieves', estado: 'La Guaira', mun: 'Vargas', parr: 'Catia la Mar' },
+  { nombre: 'Polideportivo José María Vargas', estado: 'La Guaira', mun: 'Vargas', parr: 'Carlos Soublette' },
+  { nombre: 'Estadio Playa Grande', estado: 'La Guaira', mun: 'Vargas', parr: 'Urimare' },
+  { nombre: 'Campo de golf', estado: 'La Guaira', mun: 'Vargas', parr: 'Caraballeda' },
+  { nombre: 'Mare Abajo', estado: 'La Guaira', mun: 'Vargas', parr: 'Carlos Soublette' }
+];
+const IMS_REG_ALOJAMIENTOS = IMS_REG_ALOJ_GEO.map(x => x.nombre);
+const mmGetAlojGeo = raw => {
+  const f = fold(raw || '');
+  return f ? (IMS_REG_ALOJ_GEO.find(x => fold(x.nombre) === f) || null) : null;
+};
+const mmIsAllowedAloj = raw => !!mmGetAlojGeo(raw);
 const mmMapProjName = raw => {
   const f = fold(raw || '');
   if(!f) return '';
@@ -1047,12 +1063,301 @@ function mmComputeActive(){
   return mmComputeGeneric();
 }
 
+function mmApportion(weights, target, caps){
+  const n = weights.length;
+  const out = Array(n).fill(0);
+  if(!n || target <= 0) return out;
+  const lim = caps ? caps.map(c => Math.max(0, Math.floor(c))) : Array(n).fill(Infinity);
+  const w = weights.map((v, i) => (v > 0 && lim[i] > 0) ? v : 0);
+  let maxCap = 0;
+  for(let i = 0; i < n; i++){
+    if(w[i] > 0) maxCap = (lim[i] === Infinity || maxCap === Infinity) ? Infinity : (maxCap + lim[i]);
+  }
+  const goal = Math.min(Math.floor(target), maxCap);
+  let rem = goal;
+  if(rem <= 0) return out;
+
+  const active = [];
+  for(let i = 0; i < n; i++) if(w[i] > 0) active.push(i);
+
+  while(active.length && rem > 0){
+    const sumW = active.reduce((s, i) => s + w[i], 0);
+    if(sumW <= 0) break;
+    let cappedAny = false;
+    for(let k = active.length - 1; k >= 0; k--){
+      const i = active[k];
+      const exact = rem * (w[i] / sumW);
+      const room = lim[i] - out[i];
+      if(exact >= room){
+        out[i] += room;
+        rem -= room;
+        active.splice(k, 1);
+        cappedAny = true;
+      }
+    }
+    if(!cappedAny) break;
+  }
+
+  if(!active.length || rem <= 0) return out;
+
+  const sumW = active.reduce((s, i) => s + w[i], 0);
+  if(sumW <= 0) return out;
+  const fracs = active.map(i => {
+    const q = rem * (w[i] / sumW);
+    const fl = Math.min(Math.floor(q), lim[i] - out[i]);
+    out[i] += fl;
+    return { i, remFrac: q - fl, w: w[i] };
+  });
+  let left = goal - out.reduce((s, v) => s + v, 0);
+  fracs.sort((a, b) => (b.remFrac - a.remFrac) || (b.w - a.w) || (a.i - b.i));
+  for(let k = 0; k < fracs.length && left > 0; k++){
+    const idx = fracs[k].i;
+    if(out[idx] < lim[idx]){
+      out[idx]++;
+      left--;
+    }
+  }
+  return out;
+}
+
+function mmScaleEcho25(res){
+  const ratio = 0.25;
+  if(!res || !res.outRows || !res.outRows.length){
+    return {
+      ...(res || { outRows: [], omitted: [], ajustes: [] }),
+      echoMeta: { ratio, origPers: 0, scaledPers: 0, origRows: 0, scaledRows: 0, droppedRows: 0, origKits: 0, scaledKits: 0 }
+    };
+  }
+
+  const rows = res.outRows.map(g => {
+    let origF = 0, origM = 0;
+    for(let bi = 0; bi < 9; bi++){
+      origF += g.ages[bi * 2] || 0;
+      origM += g.ages[bi * 2 + 1] || 0;
+    }
+    return {
+      g,
+      origF,
+      origM,
+      origPers: origF + origM,
+      origIndig: g.indig || 0,
+      origDisc: g.disc || 0,
+      origPreg: g.preg || 0,
+      origKits: g.kits || 0
+    };
+  });
+
+  const totalPers = rows.reduce((s, r) => s + r.origPers, 0);
+  const totalF = rows.reduce((s, r) => s + r.origF, 0);
+  const totalM = rows.reduce((s, r) => s + r.origM, 0);
+  const totalIndig = rows.reduce((s, r) => s + r.origIndig, 0);
+  const totalDisc = rows.reduce((s, r) => s + r.origDisc, 0);
+  const totalPreg = rows.reduce((s, r) => s + r.origPreg, 0);
+  const totalKits = rows.reduce((s, r) => s + r.origKits, 0);
+
+  const targetPers = Math.round(totalPers * ratio);
+  const targetIndig = Math.round(totalIndig * ratio);
+  const targetDisc = Math.round(totalDisc * ratio);
+  const targetPreg = Math.round(totalPreg * ratio);
+  const targetKits = Math.round(totalKits * ratio);
+
+  const allocPers = mmApportion(rows.map(r => r.origPers), targetPers);
+
+  // Conservar filas con >= 1 persona tras escalar, o filas de solo kits que originalmente tenían 0 personas
+  const kept = [];
+  rows.forEach((r, i) => {
+    const tp = allocPers[i];
+    if(tp > 0 || (r.origPers === 0 && r.origKits > 0)){
+      kept.push({ ...r, targetPers: tp });
+    }
+  });
+
+  // Distribución ponderada por sexo (consistente globalmente y por fila)
+  const minF = kept.map(k => (k.origM === 0 && k.targetPers > 0) ? k.targetPers : 0);
+  const maxF = kept.map(k => (k.origF === 0) ? 0 : k.targetPers);
+  const minFSum = minF.reduce((s, v) => s + v, 0);
+  const maxFSum = maxF.reduce((s, v) => s + v, 0);
+  const [rawTargetF] = mmApportion([totalF, totalM], targetPers);
+  const targetF = Math.max(minFSum, Math.min(maxFSum, rawTargetF));
+
+  const extraCap = kept.map((k, i) => Math.max(0, maxF[i] - minF[i]));
+  const extraW = kept.map((k, i) => (extraCap[i] > 0 && k.origPers > 0) ? (k.targetPers * (k.origF / k.origPers)) : 0);
+  const extraF = mmApportion(extraW, Math.max(0, targetF - minFSum), extraCap);
+
+  kept.forEach((k, i) => {
+    k.rowF = minF[i] + extraF[i];
+    k.rowM = k.targetPers - k.rowF;
+  });
+
+  // Distribución ponderada por vulnerabilidades y kits
+  const allocIndig = mmApportion(kept.map(k => k.origIndig), targetIndig, kept.map(k => k.origIndig > 0 ? k.targetPers : 0));
+  const allocDisc = mmApportion(kept.map(k => k.origDisc), targetDisc, kept.map(k => k.origDisc > 0 ? k.targetPers : 0));
+  const allocPreg = mmApportion(kept.map(k => k.origPreg), targetPreg, kept.map(k => k.origPreg > 0 ? k.rowF : 0));
+  const allocKits = mmApportion(kept.map(k => k.origKits), targetKits);
+
+  const scaledRows = [];
+  kept.forEach((k, i) => {
+    const kits = allocKits[i];
+    if(k.targetPers === 0 && kits === 0) return;
+
+    const fBandsOrig = [], mBandsOrig = [];
+    for(let bi = 0; bi < 9; bi++){
+      fBandsOrig.push(k.g.ages[bi * 2] || 0);
+      mBandsOrig.push(k.g.ages[bi * 2 + 1] || 0);
+    }
+    const fBandsNew = mmApportion(fBandsOrig, k.rowF);
+    const mBandsNew = mmApportion(mBandsOrig, k.rowM);
+    const newAges = Array(18).fill(0);
+    for(let bi = 0; bi < 9; bi++){
+      newAges[bi * 2] = fBandsNew[bi];
+      newAges[bi * 2 + 1] = mBandsNew[bi];
+    }
+
+    scaledRows.push({
+      ...k.g,
+      indig: allocIndig[i],
+      disc: allocDisc[i],
+      preg: allocPreg[i],
+      ages: newAges,
+      kits
+    });
+  });
+
+  const droppedRows = rows.length - scaledRows.length;
+  const scaledPers = scaledRows.reduce((s, r) => s + r.ages.reduce((a, b) => a + b, 0), 0);
+  const scaledKits = scaledRows.reduce((s, r) => s + (r.kits || 0), 0);
+  const omitted = [...(res.omitted || [])];
+  if(droppedRows > 0){
+    omitted.push(`${fmt(droppedRows)} fila(s)/comunidad(es) omitida(s) al quedar con 0 personas tras el cálculo al 25% (ECHO Alert)`);
+  }
+
+  return {
+    outRows: scaledRows,
+    omitted,
+    ajustes: res.ajustes || [],
+    echoMeta: {
+      ratio,
+      origPers: totalPers,
+      scaledPers,
+      origRows: rows.length,
+      scaledRows: scaledRows.length,
+      droppedRows,
+      origKits: totalKits,
+      scaledKits
+    }
+  };
+}
+
+function mmLoadImsRegistro(wb, fileName){
+  if(!famDetect(wb)) return { fatal:['El archivo no contiene las pestañas vzl_cases y beneficiaries_vzl del Registro de Familias.'] };
+  const D = famLoad(wb, fileName);
+  if(D.fatal && D.fatal.length) return D;
+  const C = D.sheets && D.sheets.cases;
+  const findExtraCol = (mach, lbl) => {
+    if(!C) return -1;
+    const mi = C.machine.indexOf(mach);
+    if(mi >= 0) return mi;
+    return C.labels.findIndex(l => fold(l) === fold(lbl));
+  };
+  const iExIdx = C && C.idx && C.idx.excel_index >= 0 ? C.idx.excel_index : findExtraCol('excel_index', 'Excel Index');
+  const iOrgOtro = findExtraCol('organizacion_otro', 'Especifique la organización');
+  const iComProc = findExtraCol('communities', 'Comunidad de procedencia');
+  const iOtroAloja = findExtraCol('otro_aloja', 'Otros Alojamientos');
+  const iSecProc = findExtraCol('sector', 'Sector de procedencia');
+
+  const rawByN = new Map();
+  if(C && C.rows) C.rows.forEach(x => rawByN.set(x.n, x.r));
+
+  D.fams.forEach(f => {
+    const rr = rawByN.get(f.n);
+    const exIdx = rr && iExIdx >= 0 ? toNum(rr[iExIdx]) : null;
+    const orgOtro = rr && iOrgOtro >= 0 ? toText(rr[iOrgOtro]) : '';
+    const comProc = rr && iComProc >= 0 ? toText(rr[iComProc]) : '';
+    const otroAloja = rr && iOtroAloja >= 0 ? toText(rr[iOtroAloja]) : '';
+    const secProc = rr && iSecProc >= 0 ? toText(rr[iSecProc]) : '';
+    f._excelIndex = exIdx;
+    f.socio = (f.org && !['otro','otra'].includes(fold(f.org))) ? f.org : (orgOtro || f.org || '');
+    f.comunidadEff = f.comunidad || comProc || f.alojamiento || otroAloja || secProc || '';
+  });
+
+  D.cfg = { name: 'Registro de Familias' };
+  D.rows = D.fams;
+  D.socioList = countBy(D.fams, f => f.socio || '(vacío)');
+  D.valid = new Set(D.socioList.map(([s]) => fold(s)));
+  return D;
+}
+
+function mmComputeImsRegistro(D){
+  const seen = new Set(), grpMap = new Map(), adjSeen = new Set(), ajustes = [];
+  let omitAloj = 0, omitSocio = 0, omitFecha = 0, omitSinPers = 0;
+  const defP = MMAT.defProj === 'Otro' ? (MMAT.defProjOtro.trim() || 'Otro') : (MMAT.defProj || '');
+  const sector = MMAT.imsSector || IMS_DEF_SECTOR.registro || 'Alojamiento';
+  const sorted = D.fams.slice().sort((a, b) => (a.created || '').localeCompare(b.created || '') || a.n - b.n);
+
+  sorted.forEach(f => {
+    const alojGeo = MMAT.imsRegFilter === 'alojamientos' ? mmGetAlojGeo(f.alojamiento) : null;
+    if(MMAT.imsRegFilter === 'alojamientos' && !alojGeo){ omitAloj++; return; }
+    if(!D.valid.has(fold(f.socio || '(vacío)'))){ omitSocio++; return; }
+    if((MMAT.from || MMAT.to) && (!f.created || (MMAT.from && f.created < MMAT.from) || (MMAT.to && f.created > MMAT.to))){ omitFecha++; return; }
+
+    const famKey = f.num != null && D.famByNum.get(f.num) === f ? f.num : f._excelIndex;
+    const ps = (famKey != null ? D.byFam.get(famKey) : null) || [];
+    if(!ps.length){ omitSinPers++; return; }
+
+    const rawProj = MMAT.imsUseProjCol ? (f._colProyecto || '') : '';
+    const proj = mmMapProjName(rawProj) || defP;
+    const est = alojGeo ? alojGeo.estado : (f.estado || '');
+    const mun = alojGeo ? alojGeo.mun : (f.municipio || '');
+    const parr = alojGeo ? alojGeo.parr : (f.parroquia || '');
+    const com = alojGeo ? alojGeo.nombre : (f.comunidadEff || '');
+    const famCtx = { n: f.n, num: famKey || f.n, fecha: f.created || '', code: f.code || '', caso: f.code || '', ps };
+
+    ps.forEach(p => {
+      const pk = p.pid ? `id:${p.pid}` : `f:${p.fam ?? famKey}|${p.n}`;
+      const rec = seen.has(pk) ? 'SÍ' : 'NO';
+      seen.add(pk);
+
+      const k = [f.created || '', proj, f.socio || '', est, mun, parr, com, sector, rec].join('|');
+      let g = grpMap.get(k);
+      if(!g){
+        g = { fecha:f.created||'', proj, socio:f.socio||'', estado:est, mun, parr, com, sector, rec, indig:0, disc:0, preg:0, ages:Array(18).fill(0), kits:0 };
+        grpMap.set(k, g);
+      }
+
+      if(isIndig(p)) g.indig++;
+      if(fold(p.disc) === 'si' || (p.perfil && p.perfil.has('Persona con discapacidad'))) g.disc++;
+      if(isPreg(p)) g.preg++;
+
+      const imp = mmImputePerson(p, famCtx);
+      if(imp.adj){
+        const ak = `${f.n}|${p.n}`;
+        if(!adjSeen.has(ak)){ adjSeen.add(ak); ajustes.push(imp.adj); }
+      }
+      const bi = MAT_BANDS.findIndex(([,, lo, hi]) => imp.age >= lo && imp.age <= hi);
+      if(bi >= 0) g.ages[bi * 2 + (imp.sexo === 'Mujer' ? 0 : 1)]++;
+    });
+  });
+
+  const cmp = (x, y) => String(x || '').localeCompare(String(y || ''));
+  const outRows = [...grpMap.values()].sort((a, b) => cmp(a.fecha, b.fecha) || cmp(a.proj, b.proj) || cmp(a.socio, b.socio) || cmp(a.estado, b.estado) || cmp(a.mun, b.mun) || cmp(a.parr, b.parr) || cmp(a.com, b.com) || cmp(a.sector, b.sector) || cmp(a.rec, b.rec));
+  const omitted = [];
+  if(omitAloj) omitted.push(`${fmt(omitAloj)} familia(s) fuera de los 5 alojamientos seleccionados`);
+  if(omitSocio) omitted.push(`${fmt(omitSocio)} familia(s) de socio(s) marcados como no válidos`);
+  if(omitFecha) omitted.push(`${fmt(omitFecha)} familia(s) fuera del rango de fechas seleccionado`);
+  if(omitSinPers) omitted.push(`${fmt(omitSinPers)} familia(s) sin integrantes vinculados en beneficiaries_vzl`);
+  return { outRows, omitted, ajustes };
+}
+
 function mmComputeIms(){
   const t = MMAT.imsType, O = MMAT.imsObj;
   if(!t || !O || !O.rows) return null;
-  if(t === 'nfi' || t === 'wash') return mmComputeImsKits(O);
-  if(t === 'comunitarias') return mmComputeImsCom(O);
-  return mmComputeImsSal(t, O);
+  let res;
+  if(t === 'registro') res = mmComputeImsRegistro(O);
+  else if(t === 'nfi' || t === 'wash') res = mmComputeImsKits(O);
+  else if(t === 'comunitarias') res = mmComputeImsCom(O);
+  else res = mmComputeImsSal(t, O);
+  if(res && MMAT.imsScope === 'echo25') res = mmScaleEcho25(res);
+  return res;
 }
 
 function mmComputeImsKits(N){
@@ -1318,7 +1623,9 @@ async function mmExportMatrizExcel(res){
     'TOTAL PERSONAS','TOTAL SERVICIOS','TOTAL KITS'
   ];
   const tag = MMAT.from && MMAT.to ? `_${MMAT.from}_a_${MMAT.to}` : '';
-  const fname = `Matriz_Monitoreo_${MMAT.source.toUpperCase()}${tag}.xlsx`;
+  const alojTag = (MMAT.source === 'ims' && MMAT.imsType === 'registro' && MMAT.imsRegFilter === 'alojamientos') ? '_Alojamientos' : '';
+  const echoTag = (MMAT.source === 'ims' && MMAT.imsScope === 'echo25') ? '_ECHO_25pct' : '';
+  const fname = `Matriz_Monitoreo_${MMAT.source.toUpperCase()}${alojTag}${echoTag}${tag}.xlsx`;
   const matDate = ymdStr => {
     if(!ymdStr || !/^\d{4}-\d{2}-\d{2}$/.test(ymdStr)) return null;
     const [y, m, d] = ymdStr.split('-').map(Number);
@@ -1442,6 +1749,41 @@ function viewMatrizMonitoreo(){
 
   if(MMAT.source === 'ims'){
     if(MMAT.wb){
+      body += `<div class="panel" style="margin-bottom:14px;border-left:4px solid var(--pri,#0033a0)">
+        <div class="pj-fl" style="margin-bottom:4px">¿Para qué necesitas procesar este archivo?</div>
+        <p style="margin:0 0 10px;font-size:13.5px">
+          Elige si los datos se procesarán en modalidad <b>General (100%)</b> o para <b>ECHO Alert (25%)</b>.
+          En <b>ECHO Alert</b> la data se recalcula entera al 25% mediante distribución ponderada (por comunidad, sexo, grupo etario, vulnerabilidades y kits), omitiendo las filas que queden en 0.
+        </p>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn ${MMAT.imsScope === 'general' ? 'primary' : ''}" data-mmimsscope="general">General (100%)</button>
+          <button type="button" class="btn ${MMAT.imsScope === 'echo25' ? 'primary' : ''}" data-mmimsscope="echo25">ECHO Alert (25%)</button>
+        </div>
+      </div>`;
+
+      if(MMAT.imsType === 'registro'){
+        const famsList = MMAT.imsObj && Array.isArray(MMAT.imsObj.fams) ? MMAT.imsObj.fams : [];
+        const alojCount = famsList.filter(f => mmIsAllowedAloj(f.alojamiento)).length;
+        body += `<div class="panel" style="margin-bottom:14px;border-left:4px solid var(--pri,#0033a0)">
+          <div class="pj-fl" style="margin-bottom:4px">Alcance del Registro de Familias</div>
+          <p style="margin:0 0 8px;font-size:13.5px">
+            ¿Deseas procesar <b>toda la data</b> o <b>solo los alojamientos</b>?${famsList.length ? ` <span class="muted">(${fmt(alojCount)} de ${fmt(famsList.length)} familias coinciden en «Nombre del alojamiento»)</span>` : ''}
+          </p>
+          <p class="muted" style="margin:0 0 10px;font-size:12.5px">Alojamientos incluidos: ${IMS_REG_ALOJAMIENTOS.map(esc).join(' · ')}</p>
+          <div class="row" style="gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn ${MMAT.imsRegFilter === 'all' ? 'primary' : ''}" data-mmregfilter="all">Toda la data</button>
+            <button type="button" class="btn ${MMAT.imsRegFilter === 'alojamientos' ? 'primary' : ''}" data-mmregfilter="alojamientos">Solo alojamientos</button>
+          </div>
+        </div>`;
+      }
+
+      const regFilterPending = MMAT.imsType === 'registro' && MMAT.imsRegFilter === null;
+      if(MMAT.imsScope === null || regFilterPending){
+        const pendMsgs = [];
+        if(MMAT.imsScope === null) pendMsgs.push('<b>General (100%)</b> o <b>ECHO Alert (25%)</b>');
+        if(regFilterPending) pendMsgs.push('<b>Toda la data</b> o <b>Solo alojamientos</b>');
+        body += `<div class="note warn" style="margin-bottom:14px">Selecciona arriba ${pendMsgs.join(' y ')} para continuar.</div>`;
+      } else {
       const needsReg = NEEDS_REG.has(MMAT.imsType);
       const typeOpts = IMS_FORM_OPTS.map(([v, l]) => `<option value="${v}"${MMAT.imsType === v ? ' selected' : ''}>${esc(l)}${MMAT.imsDet === v ? ' (detectado)' : ''}</option>`).join('');
       body += `<div class="panel" style="margin-bottom:14px">
@@ -1533,7 +1875,7 @@ function viewMatrizMonitoreo(){
             ${O.types.map(tp => `<label class="check"><input type="checkbox" data-mmcomt="${tp.id}" ${O.sel.has(tp.id) ? 'checked' : ''}> ${esc(tp.label)} <span class="muted">(${fmt(tp.count)} actividades)</span></label>`).join('')}
           </div>`;
         } else {
-          const secOpts = ['Salud','SMAPS','Protección','NFI','WASH'];
+          const secOpts = ['Alojamiento','CCCM','Protección','Salud','SMAPS','NFI','WASH'];
           body += `<h2>Configuración de ${esc(O.cfg.name)}</h2>
           <div class="panel" style="margin-bottom:14px">
             <div class="grid2" style="gap:12px">
@@ -1558,6 +1900,7 @@ function viewMatrizMonitoreo(){
             ${O.socioList.map(([x, c]) => `<label class="check"><input type="checkbox" data-mmsoc value="${esc(fold(x))}" ${O.valid.has(fold(x)) ? 'checked' : ''}> ${esc(x)} <span class="muted">(${fmt(c)} registros)</span></label>`).join('')}
           </div>`;
         }
+      }
       }
     }
   } else if(MMAT.raw && (MMAT.source !== 'kobo' || MMAT.koboReady)){
@@ -1724,6 +2067,7 @@ function viewMatrizMonitoreo(){
 
   let exportHtml = '';
   if(res){
+    const echoNoteHtml = res.echoMeta ? mmEchoSummaryHtml(res.echoMeta) : '';
     exportHtml = `<h2>Periodo y exportación</h2>
     <div class="panel" style="margin-bottom:14px">
       <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
@@ -1733,9 +2077,10 @@ function viewMatrizMonitoreo(){
         ${MMAT.minDate && MMAT.maxDate ? `<span class="muted" style="font-size:12.5px">Rango disponible: ${esc(dmy(MMAT.minDate))} – ${esc(dmy(MMAT.maxDate))}</span>` : ''}
       </div>
     </div>
+    <div id="mmEchoSummary">${echoNoteHtml}</div>
     <div class="exp" style="margin-top:12px">
-      <h3>Matriz de monitoreo</h3>
-      <p class="muted">${hasOutput ? `${fmt(res.outRows.length)} fila(s) listas para exportar en el formato oficial de la Matriz de monitoreo.` : 'No hay filas válidas con los filtros y socios seleccionados.'}</p>
+      <h3>Matriz de monitoreo${MMAT.source === 'ims' && MMAT.imsScope === 'echo25' ? ' · ECHO Alert (25%)' : ''}</h3>
+      <p class="muted" id="mmExportDesc">${hasOutput ? `${fmt(res.outRows.length)} fila(s) listas para exportar en el formato oficial de la Matriz de monitoreo.` : 'No hay filas válidas con los filtros y socios seleccionados.'}</p>
       <div class="row" style="gap:10px;flex-wrap:wrap">
         <button class="btn primary" type="button" id="mmExportBtn" ${hasOutput ? '' : 'disabled'}>Descargar Excel</button>
         ${(MMAT.source === 'ims' || MMAT.source === 'kobo' || MMAT.source === 'excel') ? `<button class="btn" type="button" id="mmExportAdj" ${hasAdj ? '' : 'disabled'}>Descargar ajustes${res.ajustes ? ` (${fmt(res.ajustes.length)})` : ''}</button>` : ''}
@@ -1783,8 +2128,19 @@ function viewMatrizMonitoreo(){
   </div>`;
 }
 
+function mmEchoSummaryHtml(em){
+  if(!em) return '';
+  const kitsPart = em.origKits > 0 ? ` · <b>${fmt(em.scaledKits)}</b> de ${fmt(em.origKits)} kits` : '';
+  const dropPart = em.droppedRows > 0 ? ` (${fmt(em.droppedRows)} omitida(s) por quedar en 0)` : '';
+  return `<div class="note ok" style="margin-bottom:12px"><b>Modo ECHO Alert (25%):</b> <b>${fmt(em.scaledPers)}</b> personas al 25% (de ${fmt(em.origPers)} originales)${kitsPart} · <b>${fmt(em.scaledRows)}</b> de ${fmt(em.origRows)} fila(s) conservada(s)${dropPart}.</div>`;
+}
+
 function mmReadyForCompute(excelVal){
-  if(MMAT.source === 'ims') return !(MMAT.imsProjCol && MMAT.imsUseProjCol === null);
+  if(MMAT.source === 'ims'){
+    if(MMAT.imsScope === null) return false;
+    if(MMAT.imsType === 'registro' && MMAT.imsRegFilter === null) return false;
+    return !(MMAT.imsProjCol && MMAT.imsUseProjCol === null);
+  }
   if(MMAT.source === 'kobo') return !!MMAT.koboReady;
   if(MMAT.source === 'excel') return !!(MMAT.excelReady && excelVal && excelVal.ok);
   return true;
@@ -1795,7 +2151,14 @@ function mmRefreshOutput(){
   const res = mmReadyForCompute(excelVal) ? mmComputeActive() : null;
   const hasOutput = res && res.outRows.length > 0;
   const exBtn = $('#mmExportBtn'), adjBtn = $('#mmExportAdj');
+  const descEl = $('#mmExportDesc'), echoEl = $('#mmEchoSummary');
   if(exBtn) exBtn.disabled = !hasOutput;
+  if(descEl){
+    descEl.textContent = hasOutput
+      ? `${fmt(res.outRows.length)} fila(s) listas para exportar en el formato oficial de la Matriz de monitoreo.`
+      : 'No hay filas válidas con los filtros y socios seleccionados.';
+  }
+  if(echoEl) echoEl.innerHTML = res && res.echoMeta ? mmEchoSummaryHtml(res.echoMeta) : '';
   if(adjBtn && res && res.ajustes){
     adjBtn.disabled = !res.ajustes.length;
     adjBtn.textContent = `Descargar ajustes (${fmt(res.ajustes.length)})`;
@@ -1803,6 +2166,7 @@ function mmRefreshOutput(){
 }
 
 function mmGetImsSheetName(wb, t, obj){
+  if(t === 'registro' && obj && obj.sheets && obj.sheets.cases && wb.Sheets[obj.sheets.cases.name]) return obj.sheets.cases.name;
   if(obj && obj.sheet && wb.Sheets[obj.sheet]) return obj.sheet;
   if(t === 'nfi' || t === 'wash'){
     const d = typeof kitsSheet === 'function' ? kitsSheet(wb) : null;
@@ -1878,12 +2242,14 @@ function mmApplyImsType(t){
   MMAT.imsSector = IMS_DEF_SECTOR[t] || '';
   MMAT.imsProjCol = null;
   MMAT.imsUseProjCol = false;
+  MMAT.imsRegFilter = null;
   MMAT.defProj = '';
   MMAT.defProjOtro = '';
   if(!MMAT.wb || !t) return;
   try{
     let obj = null;
-    if(t === 'comunitarias') obj = comLoad(MMAT.wb, MMAT.file.name);
+    if(t === 'registro') obj = mmLoadImsRegistro(MMAT.wb, MMAT.file.name);
+    else if(t === 'comunitarias') obj = comLoad(MMAT.wb, MMAT.file.name);
     else if(t === 'nfi' || t === 'wash') obj = nfiLoad(MMAT.wb, MMAT.file.name, S.registro || null, t);
     else obj = salLoad(MMAT.wb, MMAT.file.name, S.registro || null, t);
     if(obj && (t === 'nfi' || t === 'wash') && Array.isArray(obj.kits)){
@@ -1914,6 +2280,7 @@ async function mmLoadMainFile(f){
     const hadFile = !!MMAT.file;
     MMAT.file = f; MMAT.wb = wb; MMAT.imsObj = null; MMAT.raw = null;
     if(MMAT.source === 'ims'){
+      MMAT.imsScope = null;
       const det = detectForm(wb);
       MMAT.imsDet = det;
       const initType = IMS_FORM_OPTS.some(([v]) => v === det) ? det : 'nfi';
@@ -1986,6 +2353,8 @@ function bindMatrizMonitoreo(){
     MMAT.file = null; MMAT.wb = null; MMAT.imsType = ''; MMAT.imsDet = ''; MMAT.imsObj = null; MMAT.raw = null;
     MMAT.imsProjCol = null;
     MMAT.imsUseProjCol = false;
+    MMAT.imsScope = null;
+    MMAT.imsRegFilter = null;
     MMAT.xlsform = null;
     MMAT.koboReady = false;
     MMAT.excelReady = false;
@@ -2054,6 +2423,14 @@ function bindMatrizMonitoreo(){
   }
 
   bindDrop('#mmFileDrop', '#mmFileIn', mmLoadMainFile);
+  document.querySelectorAll('[data-mmimsscope]').forEach(b => b.onclick = () => {
+    MMAT.imsScope = b.dataset.mmimsscope;
+    navKeepScroll();
+  });
+  document.querySelectorAll('[data-mmregfilter]').forEach(b => b.onclick = () => {
+    MMAT.imsRegFilter = b.dataset.mmregfilter;
+    navKeepScroll();
+  });
   on('#mmImsType', 'change', e => { mmApplyImsType(e.target.value); navApply(); });
   const regIn = $('#mmRegIn');
   if(regIn){
